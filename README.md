@@ -1,5 +1,8 @@
 # Whakaari
-Eruption forecast model for Whakaari (White Island, New Zealand). This model implements a time series feature engineering and classification workflow that issues eruption alerts based on real-time tremor data. This is the real-time version for running on a VM with html forecaster output and email alerting.
+Eruption forecast model for multiple volcanoes usgin machine transfer-learning.
+This model implements a time series feature engineering and classification workflow that issues eruption alerts based on real-time tremor data. This is the real-time version for running on a VM with html forecaster output and email alerting.
+
+Note: this a derived code from https://github.com/ddempsey/whakaari implemented for for Whakaari (White Island, New Zealand). Copyright (c) 2020 David Dempsey
 
 ## Installation
 
@@ -8,7 +11,7 @@ Ensure you have Anaconda Python 3.7 installed. Then
 1. Clone the repo
 
 ```bash
-git clone https://github.com/ddempsey/whakaari
+git clone https://github.com/aardid/volc_forecast_tl
 ```
 
 2. CD into the repo, switch to the real-time branch and create a conda environment
@@ -16,7 +19,7 @@ git clone https://github.com/ddempsey/whakaari
 ```bash
 cd whakaari
 
-git checkout transfer-learning
+git checkout master
 
 conda env create -f environment.yml
 
