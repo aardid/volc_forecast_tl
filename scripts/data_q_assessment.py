@@ -180,7 +180,7 @@ def corr_ana_feat():
     #
     if False: # serial 
         # loop over features 
-        for j in range(1):#range(len(ftns)):
+        for j in range(4):#range(len(ftns)):
             print(str(j)+'/'+str(len(ftns))+' : '+ftns[j])
             p = j, ftns[j], ss, ds, lbs
             calc_one_corr(p)
@@ -207,6 +207,10 @@ def corr_ana_feat():
 def calc_one_corr(p):
     'auxiliary funtion for parallelization inside function corr_ana_feat()'
     j, ftn, ss, ds, lbs = p 
+    # path to new files 
+    path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_'+str(j+1)+'_'+ftn.replace('"','-')
+    if os.path.isfile(path+'.csv'):
+        return
     # aux funtion 
     def _load_feat_erup_month(fm_a, ft_n, i):
         ti = fm_a.data.tes[i] - lbs*day # intial time
@@ -235,11 +239,11 @@ def calc_one_corr(p):
     # create heatmap figure for feature
     fig, ax = plt.subplots(figsize=(10, 10))
     # correlate and save csv
-    path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_'+str(j+1)+'_'+ftn.replace('"','-')
+    
     df_corr = df.corr(method='pearson')
     df_corr.to_csv(path+'.csv')#, index=fm_aux.fM.index)
     # save png
-    sns.heatmap(df.corr(method='pearson'), vmin=-1.0, vmax=1.0, annot=True, fmt='.2f', 
+    sns.heatmap(df_corr, vmin=-1.0, vmax=1.0, annot=True, fmt='.2f', 
                 cmap=plt.get_cmap('coolwarm'), cbar=True, ax=ax)
     ax.set_title(ftn)
     ax.set_yticklabels(ax.get_yticklabels(), rotation="horizontal")
