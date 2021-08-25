@@ -7,6 +7,10 @@ import numpy as np
 import time
 from functools import partial
 from multiprocessing import Pool
+import pandas as pd
+import seaborn as sns
+#
+from combined_forecaster import TremorDataCombined, ForecastModelCombined
 
 # tsfresh and sklearn dump a lot of warnings - these are switched off below, but should be
 # switched back on when debugging
@@ -147,20 +151,107 @@ def calc_one(p):
 def corr_ana_feat():
     ''' Correlation analysis between features calculated for multiple volcanoes 
         considering 1 month before their eruptions.
+        Correlations are performed between multiple eruptions (for several stations)
+        for common features derived from multple data streams.
+        Correlations are perfomed using pandas Pearson method.
+        Results are saved as .csv files and .png in ../features/correlations/
     '''
-    # load objects
     ## stations (volcanoes)
-    ss = ['PVV','VNSS','KRVZ','FWVZ','WIZ','BELO'] # ,'SSLW'
+    ss = ['WIZ','FWVZ','KRVZ','PVV','VNSS','BELO'] # ,'SSLW'
     ## data streams
     ds = ['log_zsc2_rsamF', 'zsc2_hfF','zsc2_mfF','zsc2_dsarF']
     ## days looking backward from eruptions 
-    lbs = [30]
-    ## write a .csv file where rows and times 1-month before each eruption and columns are the eruptions considered
-    fts = ['linear_trend_timewise','agg_linear_trend']
-    # create a pandas dataframe for each feature where the columns are the eruptions consider
-    pass # under developement 
+    lbs = 30
+    # auxiliary df to extract feature names 
+    fm = ForecastModel(window=2., overlap=1., station = 'WIZ',
+        look_forward=2., data_streams=ds, savefile_type='csv')
+    ti = fm.data.tes[0]
+    tf = fm.data.tes[0] + day
+    fm.get_features(ti=ti, tf=tf, n_jobs=2, drop_features=[], compute_only_features=[])
+    ftns = fm.fM.columns[:] # list of features names
+    # directory to be saved
+    try:
+        os.mkdir('..'+os.sep+'features'+os.sep+'correlations')
+    except:
+        pass
+    # timming
+    import timeit
+    tic=timeit.default_timer()
+    #
+    if False: # serial 
+        # loop over features 
+        for j in range(1):#range(len(ftns)):
+            print(str(j)+'/'+str(len(ftns))+' : '+ftns[j])
+            p = j, ftns[j], ss, ds, lbs
+            calc_one_corr(p)
+    else: # parallel
+        n_jobs = 4 # number of cores
+        if True:
+            print('Parallel')
+            print('Time when run:')
+            print(datetime.now())
+            print('Estimated run time (hours):')
+            print(len(ftns)/n_jobs * (231/3600))
+        #
+        ps = []
+        for j in range(len(ftns)):
+            p = j, ftns[j], ss, ds, lbs
+            ps.append(p)
+        #
+        p = Pool(n_jobs)
+        p.map(calc_one_corr, ps)
+    # end timming
+    toc=timeit.default_timer()
+    print(toc - tic) # print elapsed time in seconds
     
+def calc_one_corr(p):
+    'auxiliary funtion for parallelization inside function corr_ana_feat()'
+    j, ftn, ss, ds, lbs = p 
+    # aux funtion 
+    def _load_feat_erup_month(fm_a, ft_n, i):
+        ti = fm_a.data.tes[i] - lbs*day # intial time
+        tf = fm_a.data.tes[i] # final time
+        fm_a.get_features(ti=ti, tf=tf, n_jobs=None, drop_features=[], compute_only_features=[])
+        #fn = fm_a.fM.columns[0]   # name feature one
+        #f2c = fm_a.fM[f2n]       # whole column feature one (df)
+        fv = fm_a.fM[ft_n].values      # whole column feature one (np array)
+        return fv
+    #
+    data = []
+    lab = []
+    # loop over stations 
+    for s in ss:
+        fm_aux = ForecastModel(window=2., overlap=1., station = s,
+            look_forward=2., data_streams=ds, savefile_type='csv')
+        # loop over eruptions of station
+        for e in range(len(fm_aux.data.tes)):
+            data.append(_load_feat_erup_month(fm_aux, ftn, e))
+            lab.append(fm_aux.station+'_'+str(e+1))
+    data = np.vstack((data)).T
+    # create aux pandas obj for correlation
+    df = pd.DataFrame(data=data, index=fm_aux.fM.index, columns=lab, dtype=None, copy=None)
+    # find the correlation among the columns
+    #print(df.corr(method ='pearson'))
+    # create heatmap figure for feature
+    fig, ax = plt.subplots(figsize=(10, 10))
+    # correlate and save csv
+    path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_'+str(j+1)+'_'+ftn.replace('"','-')
+    df_corr = df.corr(method='pearson')
+    df_corr.to_csv(path+'.csv')#, index=fm_aux.fM.index)
+    # save png
+    sns.heatmap(df.corr(method='pearson'), vmin=-1.0, vmax=1.0, annot=True, fmt='.2f', 
+                cmap=plt.get_cmap('coolwarm'), cbar=True, ax=ax)
+    ax.set_title(ftn)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation="horizontal")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(path+'.png', 
+        bbox_inches='tight', pad_inches=0.0, dpi = 100)
+    del df, df_corr, data, lab, fm_aux
+    plt.close('all')
+
 if __name__ == "__main__":
     #import_data()
-    data_Q_assesment()
+    #data_Q_assesment()
     #calc_feature_pre_erup()
+    corr_ana_feat()
