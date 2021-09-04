@@ -197,7 +197,7 @@ def forecast_now():
 
 if __name__ == "__main__":
     #forecast_dec2019()
-    forecast_test()
-    #extract_all()
+    #forecast_test()
+    extract_all()
     #forecast_now()
     
