@@ -137,9 +137,10 @@ def extract_all():
     ds = ['zsc2_rsamF','zsc2_mfF','zsc2_hfF','zsc2_dsarF','diff_zsc2_rsamF','diff_zsc2_mfF','diff_zsc2_hfF','diff_zsc2_dsarF',
         'log_zsc2_rsamF','log_zsc2_mfF','log_zsc2_hfF','log_zsc2_dsarF']
     ds = ['log_zsc2_rsamF', 'zsc2_hfF']
+    ds = ['log_zsc2_rsamF', 'zsc2_hfF','zsc2_mfF','zsc2_dsarF']
     ## stations
     ss = ['KRVZ','FWVZ','WIZ']
-    ss = ['PV6']
+    ss = ['WIZ']
     ## window sizes (days)
     ws = [2.] #, 14., 90., 365.]
 
@@ -149,7 +150,7 @@ def extract_all():
         for d in ds:
             for w in ws:
                 ps.append([w,s,d])
-    n_jobs = 5 # number of cores
+    n_jobs = 4 # number of cores
     p = Pool(n_jobs)
     p.map(extract_one, ps)
 

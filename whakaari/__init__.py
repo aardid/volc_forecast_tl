@@ -482,7 +482,7 @@ class TremorData(object):
         axs[-1].legend()
         
         plt.savefig(save, dpi=400)
-    def plot_zoom(self, data_streams='rsamF', save=None, range=None):
+    def plot_zoom(self, data_streams='rsamF', save=None, range=None, label = None, col_def = None, norm = None):
         """ Plot tremor data.
 
             Parameters:
@@ -523,17 +523,26 @@ class TremorData(object):
         # plot data for each year
         data = self.get_data(*range)
         xi = datetime(year=1,month=1,day=1,hour=0,minute=0,second=0)
-        cols = ['c','m','y','g',[0.5,0.5,0.5],[0.75,0.75,0.75]]
+        cols = ['c','g','r','b',[0.5,0.5,0.5],[0.75,0.75,0.75]]
         inds = (data.index>=datetimeify(range[0]))&(data.index<=datetimeify(range[1]))
         for data_stream, col in zip(data_streams,cols):
-            ax.plot(data.index[inds], data[data_stream].loc[inds], '-', color=col, label=data_stream)
+            v_plot = data[data_stream].loc[inds]
+            if norm:
+                v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
+            if label:
+                if col_def:
+                    ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label)
+                else:
+                    ax.plot(data.index[inds], v_plot, '-', color=col, label=label, alpha = 0.7)
+            else:
+                ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream)
         for te in self.tes:
             if [te>=datetimeify(range[0]) and te<=datetimeify(range[1])]:
                 ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
         #
         ax.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
         ax.set_xlim(*range)
-        ax.legend()
+        ax.legend(loc = 2)
         ax.grid()
         ax.set_ylabel('rsam')
         ax.set_xlabel('Time [year-month]')
@@ -2402,3 +2411,5 @@ def to_nztimezone(t):
     utctz = tz.gettz('UTC')
     nztz = tz.gettz('Pacific/Auckland')
     return [ti.replace(tzinfo=utctz).astimezone(nztz) for ti in pd.to_datetime(t)]
+
+
