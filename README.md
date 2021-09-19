@@ -19,7 +19,7 @@ git clone https://github.com/aardid/volc_forecast_tl
 ```bash
 cd whakaari
 
-git checkout master
+git checkout transfer-learning
 
 conda env create -f environment.yml
 
