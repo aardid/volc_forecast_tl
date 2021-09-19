@@ -815,722 +815,6 @@ def corr_feat_analysis():
                         fl_s  = fl
                         os.rename(fl, fl[:-4]+'_'+e1+'_'+e2+'.png')
     
-    # plot feature correlation (from .csv of rank of cc eruptions)
-    if False:
-        # import file as pandas
-        path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.csv'
-        try:
-            pd_rank = pd.read_csv(path, index_col=0)
-        except: # convert txt to csv
-            read_file = pd.read_csv ('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.txt')
-            read_file.to_csv(path, index=None)
-            #
-            pd_rank = pd.read_csv(path, index_col=0)
-            del read_file
-        # locate index in rank for cc cut value of 0.5
-        idx, _ = find_nearest(pd_rank.loc[:, 'cc'].values, 0.5)
-        # for plotting: import features of eruptions per rank
-        ranks = np.arange(130,idx,1)
-        #
-        plot_2_pairs_erups = True # set to true to plot a third correlated eruption
-        if plot_2_pairs_erups:
-            ranks = np.arange(130, idx, 1)
-        #
-        # plot data stream
-        plt_ds = False # plot datastream 
-
-        for rank in [373]:#[262]: #ranks:262   2325  120
-            # name of eruptions to plot
-            e1 = pd_rank.loc[rank, 'erup1'] # name of eruptions to plot
-            e2 = pd_rank.loc[rank, 'erup2']
-            # feature to plot
-            ft_nm = pd_rank.loc[rank, 'featNM']
-            ft_id = pd_rank.loc[rank, 'featID']
-            cc = pd_rank.loc[rank, 'cc']
-            # look for the third eruption mostly correlated with the e1 or e2 in ft_nm
-            #try:
-                #
-            if plot_2_pairs_erups:
-                # loop over rank and find first apperance 
-                for r in range(rank, len(pd_rank), 1):#ranks[rank:]:
-                    naux = pd_rank.loc[r, 'featNM']
-                    if ft_nm == pd_rank.loc[r, 'featNM']:
-                        e1a, e2a = pd_rank.loc[r, 'erup1'], pd_rank.loc[r, 'erup2']
-                        if not ((e1a in [e1,e2]) or (e2a in [e1,e2])):
-                            ranka = r
-                            cca = pd_rank.loc[r, 'cc']
-                            ft_ida = pd_rank.loc[r, 'featID']
-                            break
-
-            ## import features
-            # proper name of feature
-            ft_nm_aux = ft_nm.replace(" ","__")
-            ft_nm_aux = ft_nm_aux.replace("-",'"')
-            # name of the data stream 
-            ds = ['log_zsc2_rsamF', 'zsc2_hfF','zsc2_mfF','zsc2_dsarF']
-            for d in ds:
-                if d in ft_nm_aux:
-                    ds = [d]
-                    break
-            # create objects for each station 
-            fm_e1 = ForecastModel(window=2., overlap=1., station = e1[:-2],
-                look_forward=2., data_streams=ds, savefile_type='csv')
-            fm_e2 = ForecastModel(window=2., overlap=1., station = e2[:-2],
-                look_forward=2., data_streams=ds, savefile_type='csv')
-            #
-            if plot_2_pairs_erups:
-                fm_e1a = ForecastModel(window=2., overlap=1., station = e1a[:-2],
-                look_forward=2., data_streams=ds, savefile_type='csv')
-                fm_e2a = ForecastModel(window=2., overlap=1., station = e2a[:-2],
-                look_forward=2., data_streams=ds, savefile_type='csv')
-        
-            # initial and final time of interest for each station
-            tf_e1 = fm_e1.data.tes[int(e1[-1:])-1]
-            ti_e1 = tf_e1 - 30*day #month
-            tf_e2 = fm_e2.data.tes[int(e2[-1:])-1]
-            ti_e2 = tf_e2 - 30*day
-            #
-            if plot_2_pairs_erups:
-                tf_e1a = fm_e1a.data.tes[int(e1a[-1:])-1]
-                ti_e1a = tf_e1a - 30*day #month
-                tf_e2a = fm_e2a.data.tes[int(e2a[-1:])-1]
-                ti_e2a = tf_e2a - 30*day  
-            #
-            ft_e1 = fm_e1.get_features(ti=ti_e1, tf=tf_e1, n_jobs=1, compute_only_features=[ft_nm_aux])
-            ft_e2 = fm_e2.get_features(ti=ti_e2, tf=tf_e2, n_jobs=1, compute_only_features=[ft_nm_aux])
-            # extract values to plot 
-            ft_e1_t = ft_e1[0].index.values
-            ft_e1_v = ft_e1[0].loc[:,ft_nm_aux]
-            ft_e2_t = ft_e2[0].index.values
-            ft_e2_v = ft_e2[0].loc[:,ft_nm_aux]
-            #
-            if plot_2_pairs_erups:
-                ft_e1a = fm_e1a.get_features(ti=ti_e1a, tf=tf_e1a, n_jobs=1, compute_only_features=[ft_nm_aux])
-                ft_e2a = fm_e2a.get_features(ti=ti_e2a, tf=tf_e2a, n_jobs=1, compute_only_features=[ft_nm_aux])
-                # extract values to plot 
-                ft_e1a_t = ft_e1a[0].index.values
-                ft_e1a_v = ft_e1a[0].loc[:,ft_nm_aux]
-                ft_e2a_t = ft_e2a[0].index.values
-                ft_e2a_v = ft_e2a[0].loc[:,ft_nm_aux]
-
-            # adding multiple Axes objects  
-            if not plot_2_pairs_erups:
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10,6))
-            else:
-                fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10,12))
-
-            # ax1
-            ax1.plot(ft_e1_t, ft_e1_v, '-', color='b', label=erup_dict[e1])
-            te = fm_e1.data.tes[int(e1[-1:])-1]
-            ax1.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
-            ax1.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
-            
-            ax1.grid()
-            ax1.set_ylabel('feature value')
-            ax1.set_xlabel('time')
-            #plt.xticks(rotation=45)
-            
-            # ax2
-            ax2.plot(ft_e2_t, ft_e2_v, '-', color='r', label=erup_dict[e2])
-            te = fm_e2.data.tes[int(e2[-1:])-1]
-            ax2.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
-            ax2.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
-            
-            ax2.grid()
-            ax2.set_ylabel('feature value')
-            ax2.set_xlabel('time')
-            #plt.xticks(rotation=45)
-
-            if plt_ds:
-                # plot datastream e1
-                dat = fm_e1.data.get_data(ti = ti_e1, tf = tf_e1)
-                nm = ft_nm_aux.split('__')[0]
-                #nm = '_'.join(nm)
-                ax1b = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-                if 'rsam' in nm:
-                    _nm = 'rsam'
-                if 'mf' in nm:
-                    _nm = 'mf'
-                if 'hf' in nm:
-                    _nm = 'hf'
-                if 'dsar' in nm:
-                    _nm = 'dsar'
-                ax1b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
-                    label = _nm+' data' , alpha = .3)
-                try:
-                    ax1b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                except:
-                    ax1b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                #ax1b.set_ylabel(nm)
-                ax1b.legend(loc = 1)
-                ax1b.set_yticks([])
-
-                # plot datastream e2
-                dat = fm_e2.data.get_data(ti = ti_e2, tf = tf_e2)
-                nm = ft_nm_aux.split('__')[0]
-                if 'rsam' in nm:
-                    _nm = 'rsam'
-                if 'mf' in nm:
-                    _nm = 'mf'
-                if 'hf' in nm:
-                    _nm = 'hf'
-                if 'dsar' in nm:
-                    _nm = 'dsar'
-                ax2b = ax2.twinx()  # instantiate a second axes that shares the same x-axis
-                ax2b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
-                    label = _nm+' data', alpha = .3)
-                try:
-                    ax2b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                except:
-                    ax2b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                #ax1b.set_ylabel(nm.split('_')[-1])
-                ax2b.legend(loc = 1)
-                ax2b.set_yticks([])
-
-            if plot_2_pairs_erups:
-
-                # ax3
-                ax3.plot(ft_e1a_t, ft_e1a_v, '-', color='b', label=erup_dict[e1a])
-                te = fm_e1a.data.tes[int(e1a[-1:])-1]
-                ax3.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
-                ax3.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
-                ax3.legend(loc = 2)
-                ax3.grid()
-                ax3.set_ylabel('feature value')
-                ax3.set_xlabel('time')
-                #plt.xticks(rotation=45)
-                
-                # ax4
-                ax4.plot(ft_e2a_t, ft_e2a_v, '-', color='r', label=erup_dict[e2a])
-                te = fm_e2a.data.tes[int(e2a[-1:])-1]
-                ax4.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
-                ax4.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
-                ax4.legend(loc = 2)
-                ax4.grid()
-                ax4.set_ylabel('feature value')
-                ax4.set_xlabel('time')
-                #plt.xticks(rotation=45)
-
-                if plt_ds:
-                    # plot datastream e1
-                    dat = fm_e1a.data.get_data(ti = ti_e1a, tf = tf_e1a)
-                    nm = ft_nm_aux.split('__')[0]
-                    #nm = '_'.join(nm)
-                    ax3b = ax3.twinx()  # instantiate a second axes that shares the same x-axis
-                    if 'rsam' in nm:
-                        _nm = 'rsam'
-                    if 'mf' in nm:
-                        _nm = 'mf'
-                    if 'hf' in nm:
-                        _nm = 'hf'
-                    if 'dsar' in nm:
-                        _nm = 'dsar'
-                    ax3b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
-                        label = _nm+' data' , alpha = .3)
-                    try:
-                        ax3b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                    except:
-                        ax3b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                    #ax1b.set_ylabel(nm)
-                    ax3b.legend(loc = 3)
-                    ax3b.set_yticks([])
-                    # title for second pair 
-                    ax3b.set_title('Rank: '+str(ranka)+' (cc:'+str(round(cca,2))+')  Eruptions: '+ e1a+' and '+ e2a)#, ha='center')
-                    
-                    # plot datastream e2
-                    dat = fm_e2a.data.get_data(ti = ti_e2a, tf = tf_e2a)
-                    nm = ft_nm_aux.split('__')[0]
-                    if 'rsam' in nm:
-                        _nm = 'rsam'
-                    if 'mf' in nm:
-                        _nm = 'mf'
-                    if 'hf' in nm:
-                        _nm = 'hf'
-                    if 'dsar' in nm:
-                        _nm = 'dsar'
-                    ax4b = ax4.twinx()  # instantiate a second axes that shares the same x-axis
-                    ax4b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
-                        label = _nm+' data', alpha = .3)
-                    try:
-                        ax4b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                    except:
-                        ax4b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
-                    #ax1b.set_ylabel(nm.split('_')[-1])
-                    ax4b.legend(loc = 3)
-                    ax4b.set_yticks([])
-            
-            ## plot other data
-            temp = False
-            level = False
-            rainfall = False
-            ph = False
-            u = False
-            cl = False
-            so4 = False
-            #
-            mov_avg = False # moving average for temp and level data
-            #
-            if temp or level or rainfall or u or ph or cl or so4:
-                ax1b = ax1.twinx()
-                ax2b = ax2.twinx()
-                if e2[:-2] == 'FWVZ':
-                    #ax2.plot(ft_e2_t, ft_e2_v, '-', color='w')
-                    #ax2.plot(ft_e2_t, ft_e2_v, '-', color='r', alpha = 0.8)
-                    pass
-            # plot temp data
-            if temp:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_temp_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
-                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' t (C)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()   
-                    if mov_avg: # plot moving average
-                        n=50
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
-                        ax1b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '-', color='g', label='lake temperature')
-                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature', alpha = 0.3)
-                    else:
-                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='g', label='temperature')
-                        #ax2.set_ylim([-40,40])
-                        #plt.show()
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax1b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature')
-                    #ax2b.set_ylabel('temperature C')
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_temp_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' t (C)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()   
-                    if mov_avg: # plot moving average
-                        n=50
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
-                        ax2b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '-', color='g', label='lake temperature')
-                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature', alpha = 0.3)
-                    else:
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature')
-                    #ax2b.set_ylabel('temperature C')           
-            # plot lake level data
-            if level:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_level_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
-                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' z (m)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    if mov_avg: # plot moving average
-                        n=30
-                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax1b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '-', color='b', label='lake level')
-                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='b', alpha = 0.3)
-                    else:
-                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='b', label='level')
-                        #ax2.set_ylim([-40,40])
-                        #plt.show()
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax1b.plot(temp_e1_tim, v_plot, '-', color='b', label='lake level')
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 3)  
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_level_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' z (m)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    if mov_avg: # plot moving average
-                        n=30
-                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax2b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '-', color='b', label='lake level')
-                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='b', alpha = 0.3)
-                    else:
-                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='b', label='level')
-                        #ax2.set_ylim([-40,40])
-                        #plt.show()
-                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                        ax2b.plot(temp_e1_tim, v_plot, '-', color='b', label='lake level')
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 3)   
-            # plot rainfall data
-            if rainfall:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"ruapehu_chateau_rainfall_data.csv"
-                    pd_rf = pd.read_csv(path, index_col=1)
-                    pd_rf.index = pd.to_datetime(pd_rf.index, format='%Y%m%d:%H%M')
-                    #pd_rf.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    pd_rf.index = [datetimeify(pd_rf.index[i]) for i in range(len(pd_rf.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    rf_e2_tim = pd_rf[ti_e1: tf_e1].index.values
-                    rf_e2_val = pd_rf[ti_e1: tf_e1].loc[:,'Amount(mm)'].values /4
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (rf_e2_val-np.min(rf_e2_val))/np.max((rf_e2_val-np.min(rf_e2_val)))
-                    v_plot = v_plot/8
-                    ax1b.plot(rf_e2_tim, v_plot, '-', color='c', label='rain fall', alpha = 0.8)
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 1)
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"ruapehu_chateau_rainfall_data.csv"
-                    pd_rf = pd.read_csv(path, index_col=1)
-                    pd_rf.index = pd.to_datetime(pd_rf.index, format='%Y%m%d:%H%M')
-                    #pd_rf.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    pd_rf.index = [datetimeify(pd_rf.index[i]) for i in range(len(pd_rf.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    rf_e2_tim = pd_rf[ti_e2: tf_e2].index.values
-                    rf_e2_val = pd_rf[ti_e2: tf_e2].loc[:,'Amount(mm)'].values /4
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (rf_e2_val-np.min(rf_e2_val))/np.max((rf_e2_val-np.min(rf_e2_val)))
-                    v_plot = v_plot/8
-                    ax2b.plot(rf_e2_tim, v_plot, '-', color='c', label='rain fall', alpha = 0.8)
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 1)
-            # plot lake ph data
-            if ph:
-                if e1[:-2] == 'FWVZ':
-                    pass
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_ph_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' ph (-)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    if False: # plot moving average
-                        n=40
-                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
-                        ax2b.plot(temp_e1_tim[n-1-20:-20], moving_average(temp_e1_val[::-1], n=n)[::-1], '-', color='b', label='level mov. avg.')
-                        ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='y', label='ph', alpha = 0.5)
-                    else:
-                        ax2b.plot(temp_e1_tim, temp_e1_val/np.max(temp_e1_val) - np.min(temp_e1_val), '-', color='y', label='ph')
-                    #ax2b.set_ylabel('temperature C')
-                    ax2.set_ylim([-40,40])
-                    ax2b.legend(loc = 3)            
-            # plot displacement data (from Chateau Observatory)
-            if u:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"VGOB_u_disp_abs_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
-                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' u (mm)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax1b.plot(temp_e1_tim, v_plot, '-', color='y', label='Chateau displacement')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax1b.set_ylabel('temperature C')
-                    #ax1b.legend(loc = 3)  
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"VGOB_u_disp_abs_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' u (mm)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax2b.plot(temp_e1_tim, v_plot, '-', color='y', label='Chateau displacement')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 3)            
-            # plot chloride data 
-            if cl:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_cl_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
-                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' Cl-w (mg/L)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax1b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake Cl concentration')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax1b.set_ylabel('temperature C')
-                    #ax1b.legend(loc = 3)  
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_cl_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' Cl-w (mg/L)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax2b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake Cl concentration')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 3)       
-            # plot chloride data 
-            if so4:
-                if e1[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_so4_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
-                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' SO4-w (mg/L)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax1b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake SO4 concentration')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax1b.set_ylabel('temperature C')
-                    #ax1b.legend(loc = 3)  
-                if e2[:-2] == 'FWVZ':
-                    # import temp data
-                    path = '..'+os.sep+'data'+os.sep+"RU001_so4_data.csv"
-                    pd_temp = pd.read_csv(path, index_col=1)
-                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
-                    # plot data in axis twin axis
-                    # Trim the data
-                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
-                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' SO4-w (mg/L)'].values
-                    # ax2
-                    #ax2b = ax2.twinx()
-                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
-                    ax2b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake SO4 concentration')
-                    if False: # error bars 
-                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
-                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
-                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
-                    #ax2b.set_ylabel('temperature C')
-                    #ax2b.legend(loc = 3)
-
-            if temp or level or rainfall or u or ph:
-                #ax2.set_ylim([-40,40])
-                ax2b.set_ylim([-0.01,1])
-                ax2b.legend(loc = 1)        
-            #
-            ax1.legend(loc = 2)
-            ax2.legend(loc = 2)
-            fig.suptitle('Rank: '+str(rank)+' (cc:'+str(round(cc,2))+')  Eruptions: '+ erup_dict[e1]+' and '+ erup_dict[e2]
-                +'\n Feature: '+ ft_nm_aux+' (id:'+str(ft_id)+')')#, ha='center')
-            plt.tight_layout()
-
-            #ax1.set_ylim([0, 1500])
-            #ax2.set_ylim([0, 2500])
-            #ax3.set_ylim([0, 170])
-            #ax4.set_ylim([0, 12])
-            plt.show()
-            if False: # save 
-                if os.path.isdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'): 
-                    pass
-                else:
-                    os.mkdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features')
-                #
-                #path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'corr_0_rank_erup_cc_feat_'
-                path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'feat_'
-                if plot_2_pairs_erups:
-                    if os.path.isdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs'):
-                        pass
-                    else:
-                        os.mkdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs')
-                    #
-                    #path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'corr_0_rank_erup_cc_feat_'
-                    path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs'+os.sep+'feat_'
-                plt.savefig(path+str(rank)+'_'+ft_nm+'.png', dpi = 300)
-            print(rank)
-            del fm_e1, fm_e2
-            plt.close('all')
-                #except:
-            #    pass
-
-    # hist of ranking per eruptions and per volcanoes 
-    if False: 
-        # import csv
-        # import file as pandas
-        path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.csv'
-        pd_rank = pd.read_csv(path, index_col=0)
-        
-        if True: # count per eruptions
-            ## count euruption occurency for cc > .5 in rank file
-            w_1, w_2, w_3, w_4, w_5 = 0,0,0,0,0 
-            r_1, r_2, r_3 = 0,0,0
-            t_1, t_2 = 0,0
-            b_1, b_2, b_3 = 0,0,0
-            v_1, v_2 = 0,0
-            p_1, p_2, p_3 = 0,0,0
-            # by volcano 
-            vo_1, vo_2, vo_3, vo_4, vo_5, vo_6 = 0,0,0,0,0,0
-            # set low bound for 'cc'
-            cc_l = 0.5         
-            # loop over rank (index)
-            for index, row in pd_rank.iterrows():
-                e1 = pd_rank.loc[index, 'erup1'] # name of eruptions to plot
-                e2 = pd_rank.loc[index, 'erup2']
-                cc = pd_rank.loc[index, 'cc']
-                if cc > cc_l:
-                    #
-                    if e1 == 'WIZ_1' or e2 == 'WIZ_1':
-                        w_1 += 1
-                        vo_1 += 1
-                    if e1 == 'WIZ_2' or e2 == 'WIZ_2':
-                        w_2 += 1
-                        vo_1 += 1
-                    if e1 == 'WIZ_3' or e2 == 'WIZ_3':
-                        w_3 += 1
-                        vo_1 += 1
-                    if e1 == 'WIZ_4' or e2 == 'WIZ_4':
-                        w_4 += 1
-                        vo_1 += 1
-                    if e1 == 'WIZ_5' or e2 == 'WIZ_5':
-                        w_5 += 1
-                        vo_1 += 1
-                    #
-                    if e1 == 'FWVZ_1' or e2 == 'FWVZ_1':
-                        r_1 += 1
-                        vo_2 += 1
-                    if e1 == 'FWVZ_2' or e2 == 'FWVZ_2':
-                        r_2 += 1
-                        vo_2 += 1
-                    if e1 == 'FWVZ_3' or e2 == 'FWVZ_3':
-                        r_3 += 1
-                        vo_2 += 1
-                    #
-                    if e1 == 'KRVZ_1' or e2 == 'KRVZ_1':
-                        t_1 += 1
-                        vo_3 += 1
-                    if e1 == 'KRVZ_2' or e2 == 'KRVZ_2':
-                        t_2 += 1
-                        vo_3 += 1
-                    #
-                    if e1 == 'BELO_1' or e2 == 'BELO_1':
-                        b_1 += 1
-                        vo_4 += 1
-                    if e1 == 'BELO_2' or e2 == 'BELO_2':
-                        b_2 += 1
-                        vo_4 += 1
-                    #
-                    if e1 == 'VNSS_1' or e2 == 'VNSS_1':
-                        v_1 += 1
-                        vo_5 += 1
-                    if e1 == 'VNSS_2' or e2 == 'VNSS_2':
-                        v_2 += 1
-                        vo_5 += 1
-                    #
-                    if e1 == 'PVV_1' or e2 == 'PVV_1':
-                        p_1 += 1
-                        vo_6 += 1
-                    if e1 == 'PVV_2' or e2 == 'PVV_2':
-                        p_2 += 1
-                        vo_6 += 1
-                    if e1 == 'PVV_3' or e2 == 'PVV_3':
-                        p_3 += 1
-                        vo_6 += 1
-            
-            ## plot results for eruptions
-            data = [w_1, w_2,  w_3, w_4,  w_5,
-                    r_1, r_2, r_3, t_1, t_2,
-                    b_1, b_2, v_1, v_2, p_1, p_2, p_3]
-            columns = ('WIZ_1', 'WIZ_2', 'WIZ_3', 'WIZ_4', 'WIZ_5',
-                'FWVZ_1', 'FWVZ_2', 'FWVZ_3', 'KRVZ_1', 'KRVZ_2',
-                'BELO_1', 'BELO_2', 'VNSS_1', 'VNSS_2', 
-                'PVV_1', 'PVV_2', 'PVV_3')
-            # adding multiple Axes objects  
-            fig, (ax1) = plt.subplots(1, 1, figsize=(8,4))
-            # ax1
-            a =np.arange(0,len(data),1)
-            ax1.bar(a, data)
-            #ax1.text(x = a, y = data, s = [str(d) for d in data], zorder = 3, fontsize=12)
-            plt.xticks(rotation=90)
-            plt.xticks(a, columns)
-
-            ax1.set_ylabel('frequency')
-            ax1.set_xlabel('eruption')
-            ax1.set_title('Eruption ocurrence in correlation \n(cc low bound: '+str(cc_l)+')')
-            plt.tight_layout()
-            path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_ocurrence_eruption_cc_'+str(cc_l)
-            plt.savefig(path+'.png', dpi = 300)
-
-            ## plot results for volcano
-            if True: # normalize by amount of eruptions in teh volcano 
-                data = [vo_1/5, vo_2/3, vo_3/2, vo_4/2, vo_5/2, vo_6/3]
-            else:
-                data = [vo_1, vo_2, vo_3, vo_4, vo_5, vo_6]
-            columns = ('WIZ', 'FWVZ', 'KRVZ', 'BELO', 'VNSS', 'PVV')
-            # adding multiple Axes objects  
-            fig, (ax1) = plt.subplots(1, 1, figsize=(4,4))
-            # ax1
-            a =np.arange(0,len(data),1)
-            ax1.bar(a, data)
-            #ax1.text(x = a, y = data, s = [str(d) for d in data], zorder = 3, fontsize=12)
-            plt.xticks(rotation=90)
-            plt.xticks(a, columns)
-            ax1.set_ylabel('frequency')
-            ax1.set_xlabel('eruption')
-            ax1.set_title('Volcano ocurrence in correlation \n(cc low bound: '+str(cc_l)+')')
-            plt.tight_layout()
-            path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_ocurrence_volcano_cc_'+str(cc_l)
-            plt.savefig(path+'.png', dpi = 300)
-
-            del pd_rank
-            #plt.show()
-            plt.close('all')
-
     # download geonet lake temperature and level data 
     if False:
         ## download temperature data. Save in data folder
@@ -1748,6 +1032,739 @@ def corr_feat_analysis():
 
         # plot temp data against features for Ruapehu
 
+    # plot feature correlation (from .csv of rank of cc eruptions)
+    if True:
+        # import file as pandas
+        path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.csv'
+        try:
+            pd_rank = pd.read_csv(path, index_col=0)
+        except: # convert txt to csv
+            read_file = pd.read_csv ('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.txt')
+            read_file.to_csv(path, index=None)
+            #
+            pd_rank = pd.read_csv(path, index_col=0)
+            del read_file
+        # locate index in rank for cc cut value of 0.5
+        idx, _ = find_nearest(pd_rank.loc[:, 'cc'].values, 0.5)
+        # for plotting: import features of eruptions per rank
+        ranks = np.arange(130,idx,1)
+        #
+        plot_2_pairs_erups = True # set to true to plot a third correlated eruption
+        if plot_2_pairs_erups:
+            ranks = np.arange(130, idx, 1)
+        #
+        # plot data stream
+        plt_ds = True # plot datastream 
+
+        for rank in [262]:#[262]: #ranks:262   2325  120
+            # name of eruptions to plot
+            e1 = pd_rank.loc[rank, 'erup1'] # name of eruptions to plot
+            e2 = pd_rank.loc[rank, 'erup2']
+            # feature to plot
+            ft_nm = pd_rank.loc[rank, 'featNM']
+            ft_id = pd_rank.loc[rank, 'featID']
+            cc = pd_rank.loc[rank, 'cc']
+            # look for the third eruption mostly correlated with the e1 or e2 in ft_nm
+            #try:
+                #
+            if plot_2_pairs_erups:
+                # loop over rank and find first apperance 
+                for r in range(rank, len(pd_rank), 1):#ranks[rank:]:
+                    naux = pd_rank.loc[r, 'featNM']
+                    if ft_nm == pd_rank.loc[r, 'featNM']:
+                        e1a, e2a = pd_rank.loc[r, 'erup1'], pd_rank.loc[r, 'erup2']
+                        if not ((e1a in [e1,e2]) or (e2a in [e1,e2])):
+                            ranka = r
+                            cca = pd_rank.loc[r, 'cc']
+                            ft_ida = pd_rank.loc[r, 'featID']
+                            break
+
+            ## import features
+            # proper name of feature
+            ft_nm_aux = ft_nm.replace(" ","__")
+            ft_nm_aux = ft_nm_aux.replace("-",'"')
+            # name of the data stream 
+            ds = ['log_zsc2_rsamF', 'zsc2_hfF','zsc2_mfF','zsc2_dsarF']
+            for d in ds:
+                if d in ft_nm_aux:
+                    ds = [d]
+                    break
+            # create objects for each station 
+            fm_e1 = ForecastModel(window=2., overlap=1., station = e1[:-2],
+                look_forward=2., data_streams=ds, savefile_type='csv')
+            fm_e2 = ForecastModel(window=2., overlap=1., station = e2[:-2],
+                look_forward=2., data_streams=ds, savefile_type='csv')
+            #
+            if plot_2_pairs_erups:
+                fm_e1a = ForecastModel(window=2., overlap=1., station = e1a[:-2],
+                look_forward=2., data_streams=ds, savefile_type='csv')
+                fm_e2a = ForecastModel(window=2., overlap=1., station = e2a[:-2],
+                look_forward=2., data_streams=ds, savefile_type='csv')
+        
+            # initial and final time of interest for each station
+            tf_e1 = fm_e1.data.tes[int(e1[-1:])-1]
+            ti_e1 = tf_e1 - 30*day #month
+            tf_e2 = fm_e2.data.tes[int(e2[-1:])-1]
+            ti_e2 = tf_e2 - 30*day
+            #
+            if plot_2_pairs_erups:
+                tf_e1a = fm_e1a.data.tes[int(e1a[-1:])-1]
+                ti_e1a = tf_e1a - 30*day #month
+                tf_e2a = fm_e2a.data.tes[int(e2a[-1:])-1]
+                ti_e2a = tf_e2a - 30*day  
+            #
+            ft_e1 = fm_e1.get_features(ti=ti_e1, tf=tf_e1, n_jobs=1, compute_only_features=[ft_nm_aux])
+            ft_e2 = fm_e2.get_features(ti=ti_e2, tf=tf_e2, n_jobs=1, compute_only_features=[ft_nm_aux])
+            # extract values to plot 
+            ft_e1_t = ft_e1[0].index.values
+            ft_e1_v = ft_e1[0].loc[:,ft_nm_aux]
+            ft_e2_t = ft_e2[0].index.values
+            ft_e2_v = ft_e2[0].loc[:,ft_nm_aux]
+            #
+            if plot_2_pairs_erups:
+                ft_e1a = fm_e1a.get_features(ti=ti_e1a, tf=tf_e1a, n_jobs=1, compute_only_features=[ft_nm_aux])
+                ft_e2a = fm_e2a.get_features(ti=ti_e2a, tf=tf_e2a, n_jobs=1, compute_only_features=[ft_nm_aux])
+                # extract values to plot 
+                ft_e1a_t = ft_e1a[0].index.values
+                ft_e1a_v = ft_e1a[0].loc[:,ft_nm_aux]
+                ft_e2a_t = ft_e2a[0].index.values
+                ft_e2a_v = ft_e2a[0].loc[:,ft_nm_aux]
+
+            # adding multiple Axes objects  
+            if not plot_2_pairs_erups:
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10,6))
+            else:
+                fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10,12))
+
+            # ax1
+            ax1.plot(ft_e1_t, ft_e1_v, '-', color='b', label=erup_dict[e1])
+            te = fm_e1.data.tes[int(e1[-1:])-1]
+            ax1.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+            ax1.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+            
+            ax1.grid()
+            ax1.set_ylabel('feature value')
+            ax1.set_xlabel('time')
+            #plt.xticks(rotation=45)
+            
+            # ax2
+            ax2.plot(ft_e2_t, ft_e2_v, '-', color='r', label=erup_dict[e2])
+            te = fm_e2.data.tes[int(e2[-1:])-1]
+            ax2.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+            ax2.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+            
+            ax2.grid()
+            ax2.set_ylabel('feature value')
+            ax2.set_xlabel('time')
+            #plt.xticks(rotation=45)
+
+            if plt_ds:
+                # plot datastream e1
+                dat = fm_e1.data.get_data(ti = ti_e1, tf = tf_e1)
+                nm = ft_nm_aux.split('__')[0]
+                #nm = '_'.join(nm)
+                ax1b = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+                if 'rsam' in nm:
+                    _nm = 'rsam'
+                if 'mf' in nm:
+                    _nm = 'mf'
+                if 'hf' in nm:
+                    _nm = 'hf'
+                if 'dsar' in nm:
+                    _nm = 'dsar'
+                ax1b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
+                    label = _nm+' data' , alpha = .3)
+                try:
+                    ax1b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                except:
+                    ax1b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                #ax1b.set_ylabel(nm)
+                ax1b.legend(loc = 1)
+                ax1b.set_yticks([])
+
+                # plot datastream e2
+                dat = fm_e2.data.get_data(ti = ti_e2, tf = tf_e2)
+                nm = ft_nm_aux.split('__')[0]
+                if 'rsam' in nm:
+                    _nm = 'rsam'
+                if 'mf' in nm:
+                    _nm = 'mf'
+                if 'hf' in nm:
+                    _nm = 'hf'
+                if 'dsar' in nm:
+                    _nm = 'dsar'
+                ax2b = ax2.twinx()  # instantiate a second axes that shares the same x-axis
+                ax2b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
+                    label = _nm+' data', alpha = .3)
+                try:
+                    ax2b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                except:
+                    ax2b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                #ax1b.set_ylabel(nm.split('_')[-1])
+                ax2b.legend(loc = 1)
+                ax2b.set_yticks([])
+
+            if plot_2_pairs_erups:
+
+                # ax3
+                ax3.plot(ft_e1a_t, ft_e1a_v, '-', color='b', label=erup_dict[e1a])
+                te = fm_e1a.data.tes[int(e1a[-1:])-1]
+                ax3.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+                ax3.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+                ax3.legend(loc = 2)
+                ax3.grid()
+                ax3.set_ylabel('feature value')
+                ax3.set_xlabel('time')
+                #plt.xticks(rotation=45)
+                
+                # ax4
+                ax4.plot(ft_e2a_t, ft_e2a_v, '-', color='r', label=erup_dict[e2a])
+                te = fm_e2a.data.tes[int(e2a[-1:])-1]
+                ax4.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+                ax4.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+                ax4.legend(loc = 2)
+                ax4.grid()
+                ax4.set_ylabel('feature value')
+                ax4.set_xlabel('time')
+                #plt.xticks(rotation=45).
+
+                if plt_ds:
+                    # plot datastream e1
+                    dat = fm_e1a.data.get_data(ti = ti_e1a, tf = tf_e1a)
+                    nm = ft_nm_aux.split('__')[0]
+                    #nm = '_'.join(nm)
+                    ax3b = ax3.twinx()  # instantiate a second axes that shares the same x-axis
+                    if 'rsam' in nm:
+                        _nm = 'rsam'
+                    if 'mf' in nm:
+                        _nm = 'mf'
+                    if 'hf' in nm:
+                        _nm = 'hf'
+                    if 'dsar' in nm:
+                        _nm = 'dsar'
+                    ax3b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
+                        label = _nm+' data' , alpha = .3)
+                    try:
+                        ax3b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                    except:
+                        ax3b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                    #ax1b.set_ylabel(nm)
+                    ax3b.legend(loc = 4)
+                    ax3b.set_yticks([])
+                    # title for second pair 
+                    ax3b.set_title('Rank: '+str(ranka)+' (cc:'+str(round(cca,2))+')  Eruptions: '+ e1a+' and '+ e2a)#, ha='center')
+                    
+                    # plot datastream e2
+                    dat = fm_e2a.data.get_data(ti = ti_e2a, tf = tf_e2a)
+                    nm = ft_nm_aux.split('__')[0]
+                    if 'rsam' in nm:
+                        _nm = 'rsam'
+                    if 'mf' in nm:
+                        _nm = 'mf'
+                    if 'hf' in nm:
+                        _nm = 'hf'
+                    if 'dsar' in nm:
+                        _nm = 'dsar'
+                    ax4b = ax4.twinx()  # instantiate a second axes that shares the same x-axis
+                    ax4b.plot(dat.index.values, dat[nm].values, color='c', linestyle='-', linewidth=1, 
+                        label = _nm+' data', alpha = .3)
+                    try:
+                        ax4b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                    except:
+                        ax4b.set_ylim([-.5*np.max(dat[nm].values),np.max(dat[nm].values)])
+                    #ax1b.set_ylabel(nm.split('_')[-1])
+                    ax4b.legend(loc = 4)
+                    ax4b.set_yticks([])
+            
+            ## plot other data
+            temp = False
+            level = False
+            rainfall = False
+            ph = False
+            u = False
+            cl = False
+            so4 = False
+            #
+            mov_avg = True # moving average for temp and level data
+            #
+            if temp or level or rainfall or u or ph or cl or so4:
+                ax1b = ax1.twinx()
+                ax2b = ax2.twinx()
+                if e2[:-2] == 'FWVZ':
+                    #ax2.plot(ft_e2_t, ft_e2_v, '-', color='w')
+                    #ax2.plot(ft_e2_t, ft_e2_v, '-', color='r', alpha = 0.8)
+                    pass
+            # plot temp data
+            if temp:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_temp_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
+                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' t (C)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()   
+                    if mov_avg: # plot moving average
+                        n=50
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
+                        ax1b.plot(temp_e1_tim[n-1-15:-15], moving_average(v_plot[::-1], n=n)[::-1], '-', color='g', label='lake temperature')
+                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature', alpha = 0.3)
+                    else:
+                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='g', label='temperature')
+                        #ax2.set_ylim([-40,40])
+                        #plt.show()
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax1b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature')
+                    #ax2b.set_ylabel('temperature C')
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_temp_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' t (C)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()   
+                    if mov_avg: # plot moving average
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature')
+                        n=50
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
+                        ax2b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '--', color='k')#, label='lake temperature')
+                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature', alpha = 0.3)
+                    else:
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax2b.plot(temp_e1_tim, v_plot, '-', color='g', label='lake temperature')
+                    #ax2b.set_ylabel('temperature C')   
+                    #ax2b.legend(loc = 3)         
+            # plot lake level data
+            if level:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_level_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
+                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' z (m)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    if mov_avg: # plot moving average
+                        n=30
+                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax1b.plot(temp_e1_tim[n-1-20:-20], moving_average(v_plot[::-1], n=n)[::-1], '-', color='b', label='lake level')
+                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='b', alpha = 0.3)
+                    else:
+                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='b', label='level')
+                        #ax2.set_ylim([-40,40])
+                        #plt.show()
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax1b.plot(temp_e1_tim, v_plot, '-', color='b', label='lake level')
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 3)  
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_level_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' z (m)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    if mov_avg: # plot moving average
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax2b.plot(temp_e1_tim, v_plot, '-', color='b', label='lake level')
+                        n=30
+                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax2b.plot(temp_e1_tim[n-1-15:-15], moving_average(v_plot[::-1], n=n)[::-1], '--', color='k')#, label='lake level')
+                        #ax2b.plot(temp_e1_tim, v_plot, '-', color='b', alpha = 0.3)
+                    else:
+                        #ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='b', label='level')
+                        #ax2.set_ylim([-40,40])
+                        #plt.show()
+                        v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                        ax2b.plot(temp_e1_tim, v_plot, '-', color='b', label='lake level')
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 3)   
+            # plot rainfall data
+            if rainfall:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"ruapehu_chateau_rainfall_data.csv"
+                    pd_rf = pd.read_csv(path, index_col=1)
+                    pd_rf.index = pd.to_datetime(pd_rf.index, format='%Y%m%d:%H%M')
+                    #pd_rf.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    pd_rf.index = [datetimeify(pd_rf.index[i]) for i in range(len(pd_rf.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    rf_e2_tim = pd_rf[ti_e1: tf_e1].index.values
+                    rf_e2_val = pd_rf[ti_e1: tf_e1].loc[:,'Amount(mm)'].values /4
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (rf_e2_val-np.min(rf_e2_val))/np.max((rf_e2_val-np.min(rf_e2_val)))
+                    v_plot = v_plot/8
+                    ax1b.plot(rf_e2_tim, v_plot, '-', color='c', label='rain fall', alpha = 0.8)
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 1)
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"ruapehu_chateau_rainfall_data.csv"
+                    pd_rf = pd.read_csv(path, index_col=1)
+                    pd_rf.index = pd.to_datetime(pd_rf.index, format='%Y%m%d:%H%M')
+                    #pd_rf.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    pd_rf.index = [datetimeify(pd_rf.index[i]) for i in range(len(pd_rf.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    rf_e2_tim = pd_rf[ti_e2: tf_e2].index.values
+                    rf_e2_val = pd_rf[ti_e2: tf_e2].loc[:,'Amount(mm)'].values /4
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (rf_e2_val-np.min(rf_e2_val))/np.max((rf_e2_val-np.min(rf_e2_val)))
+                    v_plot = v_plot/8
+                    ax2b.plot(rf_e2_tim, v_plot, '-', color='c', label='rain fall', alpha = 0.8)
+                    #ax2b.set_ylabel('temperature C')
+                #ax2b.legend(loc = 3)
+            # plot lake ph data
+            if ph:
+                if e1[:-2] == 'FWVZ':
+                    pass
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_ph_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' ph (-)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    if False: # plot moving average
+                        n=40
+                        #ax2b.plot(temp_e1_tim[:-n+1], moving_average(temp_e1_val, n=n), '--', color='k', label='temp. mov. avg.')
+                        ax2b.plot(temp_e1_tim[n-1-20:-20], moving_average(temp_e1_val[::-1], n=n)[::-1], '-', color='b', label='level mov. avg.')
+                        ax2b.plot(temp_e1_tim, temp_e1_val, '-', color='y', label='ph', alpha = 0.5)
+                    else:
+                        ax2b.plot(temp_e1_tim, temp_e1_val/np.max(temp_e1_val) - np.min(temp_e1_val), '-', color='y', label='ph')
+                    #ax2b.set_ylabel('temperature C')
+                    ax2.set_ylim([-40,40])
+                    ax2b.legend(loc = 3)            
+            # plot displacement data (from Chateau Observatory)
+            if u:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"VGOB_u_disp_abs_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
+                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' u (mm)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax1b.plot(temp_e1_tim, v_plot, '-', color='y', label='Chateau displacement')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax1b.set_ylabel('temperature C')
+                    #ax1b.legend(loc = 3)  
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"VGOB_u_disp_abs_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' u (mm)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax2b.plot(temp_e1_tim, v_plot, '-', color='y', label='Chateau displacement')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 3)            
+            # plot chloride data 
+            if cl:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_cl_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
+                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' Cl-w (mg/L)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax1b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake Cl concentration')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax1b.set_ylabel('temperature C')
+                    #ax1b.legend(loc = 3)  
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_cl_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' Cl-w (mg/L)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax2b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake Cl concentration')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 3)       
+            # plot chloride data 
+            if so4:
+                if e1[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_so4_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e1: tf_e1].index.values
+                    temp_e1_val = pd_temp[ti_e1: tf_e1].loc[:,' SO4-w (mg/L)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax1b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake SO4 concentration')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax1b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax1b.set_ylabel('temperature C')
+                    #ax1b.legend(loc = 3)  
+                if e2[:-2] == 'FWVZ':
+                    # import temp data
+                    path = '..'+os.sep+'data'+os.sep+"RU001_so4_data.csv"
+                    pd_temp = pd.read_csv(path, index_col=1)
+                    pd_temp.index = [datetimeify(pd_temp.index[i]) for i in range(len(pd_temp.index))]
+                    # plot data in axis twin axis
+                    # Trim the data
+                    temp_e1_tim = pd_temp[ti_e2: tf_e2].index.values
+                    temp_e1_val = pd_temp[ti_e2: tf_e2].loc[:,' SO4-w (mg/L)'].values
+                    # ax2
+                    #ax2b = ax2.twinx()
+                    v_plot = (temp_e1_val-np.min(temp_e1_val))/np.max((temp_e1_val-np.min(temp_e1_val)))
+                    ax2b.plot(temp_e1_tim, v_plot, '--', color='k', label='Lake SO4 concentration')
+                    if False: # error bars 
+                        temp_e1_val_err = pd_temp[ti_e2: tf_e2].loc[:,' error (mm)'].values
+                        v_plot_er = (temp_e1_val_err-np.min(temp_e1_val_err))/np.max((temp_e1_val_err-np.min(temp_e1_val_err)))
+                        #ax2b.errorbar(temp_e1_tim, v_plot, v_plot_er/3, color='y')
+                    #ax2b.set_ylabel('temperature C')
+                    #ax2b.legend(loc = 3)
+
+            if temp or level or rainfall or u or ph:
+                ax2.set_ylim([-40,40])
+                ax2b.set_ylim([-0.01,1])
+                ax2b.legend(loc = 4)        
+            #
+            ax1.legend(loc = 2)
+            ax2.legend(loc = 2)
+            #
+            if True: # xticks every week
+                dat = fm_e1.data.get_data(ti = ti_e1, tf = tf_e1)
+                ax1.set_xticks([dat.index[-1]-7*day*i for i in range(5)])
+                dat = fm_e2.data.get_data(ti = ti_e2, tf = tf_e2)
+                ax2.set_xticks([dat.index[-1]-7*day*i for i in range(5)])
+                if plot_2_pairs_erups:
+                    dat = fm_e1a.data.get_data(ti = ti_e1a, tf = tf_e1a)
+                    ax3.set_xticks([dat.index[-1]-7*day*i for i in range(5)])
+                    dat = fm_e2a.data.get_data(ti = ti_e2a, tf = tf_e2a)
+                    ax4.set_xticks([dat.index[-1]-7*day*i for i in range(5)])
+            #
+
+            plt.tight_layout()
+            #ax1.set_ylim([0, 1500])
+            #ax2.set_ylim([0,35])
+            #ax3.set_ylim([0,160])
+            #ax4.set_ylim([0,12.5])
+            plt.show()
+            fig.suptitle('Rank: '+str(rank)+' (cc:'+str(round(cc,2))+')  Eruptions: '+ erup_dict[e1]+' and '+ erup_dict[e2]
+                +'\n Feature: '+ ft_nm_aux+' (id:'+str(ft_id)+')')#, ha='center')
+            if False: # save 
+                if os.path.isdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'): 
+                    pass
+                else:
+                    os.mkdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features')
+                #
+                #path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'corr_0_rank_erup_cc_feat_'
+                path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'feat_'
+                if plot_2_pairs_erups:
+                    if os.path.isdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs'):
+                        pass
+                    else:
+                        os.mkdir('..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs')
+                    #
+                    #path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'corr_0_rank_erup_cc_feat_'
+                    path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'plot_ranking_features'+os.sep+'plot_ranking_features_2pairs'+os.sep+'feat_'
+                plt.savefig(path+str(rank)+'_'+ft_nm+'.png', dpi = 300)
+            print(rank)
+            del fm_e1, fm_e2
+            plt.close('all')
+                #except:
+            #    pass
+
+    # hist of ranking per eruptions and per volcanoes 
+    if False: 
+        # import csv
+        # import file as pandas
+        path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.csv'
+        pd_rank = pd.read_csv(path, index_col=0)
+        
+        if True: # count per eruptions
+            ## count euruption occurency for cc > .5 in rank file
+            w_1, w_2, w_3, w_4, w_5 = 0,0,0,0,0 
+            r_1, r_2, r_3 = 0,0,0
+            t_1, t_2 = 0,0
+            b_1, b_2, b_3 = 0,0,0
+            v_1, v_2 = 0,0
+            p_1, p_2, p_3 = 0,0,0
+            # by volcano 
+            vo_1, vo_2, vo_3, vo_4, vo_5, vo_6 = 0,0,0,0,0,0
+            # set low bound for 'cc'
+            cc_l = 0.5         
+            # loop over rank (index)
+            for index, row in pd_rank.iterrows():
+                e1 = pd_rank.loc[index, 'erup1'] # name of eruptions to plot
+                e2 = pd_rank.loc[index, 'erup2']
+                cc = pd_rank.loc[index, 'cc']
+                if cc > cc_l:
+                    #
+                    if e1 == 'WIZ_1' or e2 == 'WIZ_1':
+                        w_1 += 1
+                        vo_1 += 1
+                    if e1 == 'WIZ_2' or e2 == 'WIZ_2':
+                        w_2 += 1
+                        vo_1 += 1
+                    if e1 == 'WIZ_3' or e2 == 'WIZ_3':
+                        w_3 += 1
+                        vo_1 += 1
+                    if e1 == 'WIZ_4' or e2 == 'WIZ_4':
+                        w_4 += 1
+                        vo_1 += 1
+                    if e1 == 'WIZ_5' or e2 == 'WIZ_5':
+                        w_5 += 1
+                        vo_1 += 1
+                    #
+                    if e1 == 'FWVZ_1' or e2 == 'FWVZ_1':
+                        r_1 += 1
+                        vo_2 += 1
+                    if e1 == 'FWVZ_2' or e2 == 'FWVZ_2':
+                        r_2 += 1
+                        vo_2 += 1
+                    if e1 == 'FWVZ_3' or e2 == 'FWVZ_3':
+                        r_3 += 1
+                        vo_2 += 1
+                    #
+                    if e1 == 'KRVZ_1' or e2 == 'KRVZ_1':
+                        t_1 += 1
+                        vo_3 += 1
+                    if e1 == 'KRVZ_2' or e2 == 'KRVZ_2':
+                        t_2 += 1
+                        vo_3 += 1
+                    #
+                    if e1 == 'BELO_1' or e2 == 'BELO_1':
+                        b_1 += 1
+                        vo_4 += 1
+                    if e1 == 'BELO_2' or e2 == 'BELO_2':
+                        b_2 += 1
+                        vo_4 += 1
+                    #
+                    if e1 == 'VNSS_1' or e2 == 'VNSS_1':
+                        v_1 += 1
+                        vo_5 += 1
+                    if e1 == 'VNSS_2' or e2 == 'VNSS_2':
+                        v_2 += 1
+                        vo_5 += 1
+                    #
+                    if e1 == 'PVV_1' or e2 == 'PVV_1':
+                        p_1 += 1
+                        vo_6 += 1
+                    if e1 == 'PVV_2' or e2 == 'PVV_2':
+                        p_2 += 1
+                        vo_6 += 1
+                    if e1 == 'PVV_3' or e2 == 'PVV_3':
+                        p_3 += 1
+                        vo_6 += 1
+            
+            ## plot results for eruptions
+            data = [w_1, w_2,  w_3, w_4,  w_5,
+                    r_1, r_2, r_3, t_1, t_2,
+                    b_1, b_2, v_1, v_2, p_1, p_2, p_3]
+            columns = ('WIZ_1', 'WIZ_2', 'WIZ_3', 'WIZ_4', 'WIZ_5',
+                'FWVZ_1', 'FWVZ_2', 'FWVZ_3', 'KRVZ_1', 'KRVZ_2',
+                'BELO_1', 'BELO_2', 'VNSS_1', 'VNSS_2', 
+                'PVV_1', 'PVV_2', 'PVV_3')
+            # adding multiple Axes objects  
+            fig, (ax1) = plt.subplots(1, 1, figsize=(8,4))
+            # ax1
+            a =np.arange(0,len(data),1)
+            ax1.bar(a, data)
+            #ax1.text(x = a, y = data, s = [str(d) for d in data], zorder = 3, fontsize=12)
+            plt.xticks(rotation=90)
+            plt.xticks(a, columns)
+
+            ax1.set_ylabel('frequency')
+            ax1.set_xlabel('eruption')
+            ax1.set_title('Eruption ocurrence in correlation \n(cc low bound: '+str(cc_l)+')')
+            plt.tight_layout()
+            path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_ocurrence_eruption_cc_'+str(cc_l)
+            plt.savefig(path+'.png', dpi = 300)
+
+            ## plot results for volcano
+            if True: # normalize by amount of eruptions in teh volcano 
+                data = [vo_1/5, vo_2/3, vo_3/2, vo_4/2, vo_5/2, vo_6/3]
+            else:
+                data = [vo_1, vo_2, vo_3, vo_4, vo_5, vo_6]
+            columns = ('WIZ', 'FWVZ', 'KRVZ', 'BELO', 'VNSS', 'PVV')
+            # adding multiple Axes objects  
+            fig, (ax1) = plt.subplots(1, 1, figsize=(4,4))
+            # ax1
+            a =np.arange(0,len(data),1)
+            ax1.bar(a, data)
+            #ax1.text(x = a, y = data, s = [str(d) for d in data], zorder = 3, fontsize=12)
+            plt.xticks(rotation=90)
+            plt.xticks(a, columns)
+            ax1.set_ylabel('frequency')
+            ax1.set_xlabel('eruption')
+            ax1.set_title('Volcano ocurrence in correlation \n(cc low bound: '+str(cc_l)+')')
+            plt.tight_layout()
+            path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_ocurrence_volcano_cc_'+str(cc_l)
+            plt.savefig(path+'.png', dpi = 300)
+
+            del pd_rank
+            #plt.show()
+            plt.close('all')
+
     # plot feature along multiple datastreams (Figure 3 paper)
     if False: 
         # 
@@ -1897,7 +1914,6 @@ def corr_feat_analysis():
                 ax2.legend(loc = 2)
                 ax2.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 1)
                 ax2.set_xticks([dat.index[-1]-7*day*i for i in range(5)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-
 
             ## ax3 and ax4
             ax3.plot(ft_e2_t, ft_e2_v, '-', color='b', label=erup_dict[e2])
@@ -2056,7 +2072,7 @@ def corr_feat_analysis():
                     ax8.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 2)
                     ax8.set_xticks([dat.index[-1]-7*day*i for i in range(5)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
 
-                #
+
             fig.suptitle('Feature: '+ ft_nm_aux, ha='center')
             plt.tight_layout()
             plt.show()
@@ -2141,14 +2157,14 @@ def corr_feat_analysis():
                         count2 +=1
                         print('Months: '+str(count2)+'/'+str(years_back*12))
 
-        if False: # plot histogram
+        if True: # plot histogram
             # plot histogram of cc values 
             # import csv as dataframe
             fl_nm = path+sta+'_'+str(erup+1)+'_'+ft[0]+'_'+'.csv'
             fl_nm = fl_nm.replace('"', "-")
             df_aux = pd.read_csv(fl_nm, index_col=0)
             df_aux.index = pd.to_datetime(df_aux.index)
-            df_aux = df_aux.abs()        
+            #df_aux = df_aux.abs()        
             # plot histogram 
             dat = df_aux.iloc[:,0].values
             n_bins = int(np.sqrt(len(dat)))
@@ -2192,6 +2208,23 @@ def corr_feat_analysis():
             #    ax1.axvline(df_aux.loc[te,0], color=col[i], linestyle='--', linewidth=2, zorder = 1, label = erup_dict[sta+'_'+str(i+1)]) 
                 #ax1.axvline(aux[i], color=col[i], linestyle='--', linewidth=2, zorder = 1, label = erup_dict[sta+'_'+str(i+1)]) 
             ax1.legend(loc = 2)
+            #
+            if False: # highligth values near the eruption 
+                dat2 = []
+                # loop index pd
+                for index, row in df_aux.iterrows():
+                    add = False
+                    # loop over eruptions 
+                    for etime in fm_e1.data.tes:
+                        # check if index is close to eruption
+                        if (index < etime and index > etime-month/3):
+                            add = True
+                    # add to list
+                    if add:
+                        dat2.append(row['cc'])
+                #         
+                n_bins = int(np.sqrt(len(dat2)))
+                ax1.hist(dat2, n_bins, histtype='bar', color = 'orange', edgecolor='#E6E6E6', alpha = 0.5)#, label = 'rsam')
             plt.show()
 
         # plot with lines position of cc value at eruptions 0
