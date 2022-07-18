@@ -72,7 +72,8 @@ erup_dict = {'WIZ_1': 'Whakaari 2012',
             'MEA01_7': 'Merapi 2018d',
             'MEA01_8': 'Merapi 2019a',
             'GOD_1' : 'Eyjafjallajökull 2010a',
-            'GOD_2' : 'Eyjafjallajökull 2010b'
+            'GOD_2' : 'Eyjafjallajökull 2010b',
+            'VONK_1' : 'Holuhraun 2014a'
             }
             
 # dictionary of eruption VEI 
@@ -92,7 +93,7 @@ erup_vei_dict = {'WIZ_1': '1',
             'PVV_1': '3',
             'PVV_2': '2',
             'PVV_3': '3',
-            'VNSS_1': '2-3',
+            'VNSS_1': '2',
             'VNSS_2': '3',
             'TBTN_1': ' ',
             'TBTN_2': ' ',
@@ -117,7 +118,12 @@ sta_code = {'WIZ': 'Whakaari',
             'ONTA' : 'Ontake',
             'REF' : 'Redoubt',
             'POS' : 'Kawa Ijen',
-            'DAM' : 'Kawa Ijen'
+            'DAM' : 'Kawa Ijen',
+            'VONK' : 'Holuhraun',
+            'BOR' : 'Piton de la Fournaise',
+            'VRLE' : 'Rincon de la Vega',
+            'T01' : 'Tungurahua',
+            'COP' : 'Copahue'
             }
 
 # eruption times
@@ -137,8 +143,8 @@ erup_times = {'WIZ_1': '2012 08 04 16 52 00',
             'PVV_1': '3',
             'PVV_2': '2',
             'PVV_3': '3',
-            'VNSS_1': '2-3',
-            'VNSS_2': '3',
+            'VNSS_1': '2013 06 13 00 00 00',
+            'VNSS_2': '2018 09 04 00 00 00',
             'TBTN_1': '2011 03 07 12 00 00',
             'TBTN_2': '2013 09 25 12 00 00',
             'MEA01_1': '2014 03 09 12 00 00',
@@ -154,7 +160,10 @@ erup_times = {'WIZ_1': '2012 08 04 16 52 00',
             'ONTA_1' : '2014 09 27 11 52 00',
             'REF_1' : '2009 03 15 21 05 00',
             'POS_1' : '2013 03 20 12 00 00',
-            'DAM_1' : '2013 03 20 12 00 00'
+            'DAM_1' : '2013 03 20 12 00 00',
+            'VONK_1': '2014 08 29 12 00 00',
+            'T01_1': '2015 8 15 12 00 00',
+            'COP_1' : '2020 06 16 12 00 00'
             }
 ##########################################################
 # Auxiliary functions
@@ -409,11 +418,11 @@ def import_data():
         asdf
     # 
     if True: # download between two dates or update
-        sta = 'PVV'
-        t0 = "2021-01-01"
-        t1 = "2021-12-01"
+        sta = 'FWVZ'
+        #t0 = "2021-01-01"
+        #t1 = "2022-03-22"
         td = TremorData(station = sta)
-        #td.update(ti=t0, tf=t1, n_jobs = 2)
+        #td.update(ti=t0, tf=t1, n_jobs = 4)
         td.update()
     #
     if False:  # download between multiple pair of  dates
@@ -502,7 +511,7 @@ def calc_feature_pre_erup():
     ## stations
     #ss = ['PVV','VNSS','SSLW','OKWR','REF','BELO','CRPO','VTUN','KRVZ','FWVZ','WIZ','AUR']
     ss = ['PVV','VNSS','KRVZ','FWVZ','WIZ','BELO'] # ,'SSLW'
-    ss = ['POS','DAM']
+    ss = ['FWVZ']#,'DAM']
     ## days looking backward from eruptions 
     lbs = [30]
     ## Run parallelization 
@@ -535,15 +544,17 @@ def calc_one(p):
     #    look_forward=2., data_streams=[d], feature_dir='/media/eruption_forecasting/eruptions/features/', savefile_type='pkl') 
     fm = ForecastModel(window=2., overlap=1., station = s,
         look_forward=2., data_streams=[d], savefile_type='csv')
-    if True: # run pre define eruptions
+    if False: # run pre define eruptions
         a = fm.data.tes
         for etime in fm.data.tes:
             ti = etime - lb*day
-            tf = etime 
+            tf = etime + 2*day
             fm._load_data(ti, tf, None)
     else: # select time of eruption 
-        tf = datetimeify("2012-12-31")
-        ti = tf - 144*day
+        ti = datetimeify("2022-01-01")
+        tf = datetimeify("2022-04-09")#tf - 1200*day
+        print(ti)
+        print(tf)
         fm._load_data(ti, tf, None)
 
 def plot_feats():
@@ -3041,7 +3052,7 @@ def corr_feat_analysis():
             plt.show()
 
     # plot same feature for all the eruptions (and subsets)
-    if True: 
+    if False: 
         import numpy as np
         # import file as pandas
         path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'corr_0_rank_erup_cc.csv'
@@ -3507,7 +3518,8 @@ def corr_feat_analysis():
             _plt_erup_mult_feat(erup, rks)
     
     # Statistical significance of pre_eruptive feature
-    if False:
+    if True:
+        print('Statistical significance of pre_eruptive feature')
         import numpy as np
         ## Selecting the feature to correlate
         # characteristic feature to correlate
@@ -3549,7 +3561,7 @@ def corr_feat_analysis():
             ds = ['zsc2_hfF']
             ft = ['zsc2_hfF__fft_coefficient__coeff_38__attr_"real"']         
         ##
-        if True:
+        if False:
             fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
                 look_forward=2., data_streams=ds, savefile_type='csv')
         else:
@@ -3569,15 +3581,15 @@ def corr_feat_analysis():
         ft_e1_v = [ft_e1_v[i][0] for i in range(len(ft_e1_v))]
         ##
         # period to explore 
-        sta_exp = 'WIZ' # station to explore
+        sta_exp = 'FWVZ' # station to explore
         #
         if sta_exp == 'WIZ':
             endtime = datetimeify("2021-06-30")
             years_back = 10 # WIZ 10; VNSS 7 ; FWVZ 14
             look_back = years_back*365 + 3 # days, years back from endtime (day by day)
         if sta_exp == 'FWVZ':
-            endtime = datetimeify("2020-12-31")#("2020-12-31")
-            years_back = 14 # WIZ 10; VNSS 7 ; FWVZ 14
+            endtime = datetimeify("2021-12-31")#("2020-12-31")
+            years_back = 12 # WIZ 10; VNSS 7 ; FWVZ 14
             look_back = years_back*365 # days, years back from endtime (day by day) 
         if sta_exp == 'KRVZ':
             endtime = datetimeify("2020-12-31")#("2020-12-31")
@@ -3628,7 +3640,7 @@ def corr_feat_analysis():
         else:
             vec_days = _vec_days
         #
-        if False: # run the correlations 
+        if True: # run the correlations 
             #
             if vec_days:
                 fl_nm = path+sta+'_'+str(erup+1)+'_'+ft[0]+'_over_'+sta_exp+'.csv'
@@ -4961,6 +4973,8 @@ def download_geonet_data():
                 """
                 This function takes method data as a list
                 and returns a dataframe with all the method data.
+                https://fits.geonet.org.nz/api-docs/
+                
                 """
                 #Initialize this data frame
                 df = pd.DataFrame()
@@ -4980,15 +4994,18 @@ def download_geonet_data():
             #
             # Set the type to the type ID for temperature
             #typeID = "t" # temperature 
-            typeID = "z" # lake level
+            #typeID = "z" # lake level
             # #typeID = "nve" # number of volcanic-tectonic earthquakes recorded per day (empty)
             # typeID = "ph" # degree of acidity or alkalinity of a sample
             # typeID = "tl" # angle of tilt relative to the horizontal
             # typeID =  "u" # displacement from initial position
             # #typeID =  "u_rf" # displacement from initial position (empty)
             # typeID = "Cl-w" # chloride in water sample
-            # typeID = "SO4-w" # Sulphate in water sample
-
+            #typeID = "SO4-w" # Sulphate in water sample
+            #typeID = 'rain'
+            #typeID = 'SO2-flux-a'
+            #typeID = 'CO2-flux-a'
+            typeID = 'ap' # "air pressure","unit":"hPa"
             # Get the methods for this type ID
             methods = get_method(typeID)
             # Get all temperature data from all these sites
@@ -5001,11 +5018,24 @@ def download_geonet_data():
             # Save as CSV file
             if ruapehu:
                 if typeID == "z":
-                    siteID = 'RU001A' #2021
+                    siteID = 'RU001A' #RU001A is the data logger level (after 2009), RU001 is a manual level 
                 if typeID == "t":
                     siteID = 'RU001'
                 if typeID ==  "u" or typeID ==  "u_rf": 
                     siteID = 'VGOB'
+                if typeID ==  "u" or typeID ==  "u_rf": 
+                    siteID = 'VGOB'
+                if typeID ==  "SO4-w": 
+                    siteID = 'RU001'
+                if typeID ==  "rain": 
+                    siteID = 'RU010'
+                if typeID ==  "SO2-flux-a": 
+                    siteID = 'RU000'
+                if typeID ==  "CO2-flux-a": 
+                    siteID = 'RU000'
+                if typeID ==  "ap": 
+                    siteID = 'VGWH'
+            #
             if whakaari:
                 siteID = 'WI201'
             if typeID == "t":
@@ -5026,34 +5056,43 @@ def download_geonet_data():
                 t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_cl_data.csv")
             if typeID == "SO4-w":
                 t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_so4_data.csv")
-            #
-            if typeID == "t":  # plot temperature data
-                start = datetime.datetime(2021, 8, 9)
-                end = datetime.datetime(2021, 9, 12)
+            if typeID == "rain":
+                t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_rain_data.csv")
+            if typeID == "SO2-flux-a":
+                t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_SO2-flux-a_data.csv")
+            if typeID == "CO2-flux-a":
+                t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_CO2-flux-a_data.csv")
+            if typeID == "ap":
+                t[siteID].to_csv('..'+os.sep+'data'+os.sep+siteID+"_air_pressure_data.csv")
+            ##
 
-                # Trim the data
-                df = t[siteID].loc[t[siteID]['date-time']<end]
-                df = df.loc[t[siteID]['date-time']>start]
-                #
-                plot2 = df.plot(x='date-time', y= ' t (C)', 
-                    title = 'Temperature')
+            # if typeID == "t":  # plot temperature data
+            #     start = datetime.datetime(2021, 8, 9)
+            #     end = datetime.datetime(2021, 9, 12)
+
+            #     # Trim the data
+            #     df = t[siteID].loc[t[siteID]['date-time']<end]
+            #     df = df.loc[t[siteID]['date-time']>start]
+            #     #
+            #     plot2 = df.plot(x='date-time', y= ' t (C)', 
+            #         title = 'Temperature')
 
 
-            if typeID == "z":  # plot level data
-                start = datetime.datetime(2021, 8, 9)
-                end = datetime.datetime(2021, 9, 12)
-                #
-                #start = datetime.datetime(2006, 9, 1)
-                #end = datetime.datetime(2006, 10, 30)
-                # Trim the data
-                df = t[siteID].loc[t[siteID]['date-time']<end]
-                df = df.loc[t[siteID]['date-time']>start]
-                #
-                plot2 = df.plot(x='date-time', y= ' z (m)', 
-                    title = 'lake level')
+            # if typeID == "z":  # plot level data
+            #     start = datetime.datetime(2009, 4, 15)
+            #     end = datetime.datetime(2021, 12, 31)
+            #     #
+            #     #start = datetime.datetime(2006, 9, 1)
+            #     #end = datetime.datetime(2006, 10, 30)
+            #     # Trim the data
+            #     df = t[siteID].loc[t[siteID]['date-time']<end]
+            #     df = df.loc[t[siteID]['date-time']>start]
+            #     #
+            #     plot2 = df.plot(x='date-time', y= ' z (m)', 
+            #         title = 'lake level')
 
-            plt.grid()
-            plt.show()
+            # plt.grid()
+            # plt.show()
 
         # plot temp data against features for Ruapehu
     
@@ -5354,11 +5393,12 @@ def plot_other_data_geonet():
 
 def plot_interpretation():
     # define station and time
-    sta = 'POS'#'WIZ'
+    sta = 'FWVZ'#'FWVZ'#'WIZ'
     erup = 1
-    erup_time = datetimeify(erup_times[sta+'_'+str(erup)])
-    t0 = erup_time - 20*day#30*day
-    t1 = erup_time# + 1*day#hour
+    #erup_time = datetimeify(erup_times[sta+'_'+str(erup)])
+    erup_time = datetimeify('2022 05 11 00 00 00')
+    t0 = erup_time - 60*day#30*day
+    t1 = erup_time + 0*day#hour
 
     if False: # other dates
         #t1 = datetimeify("2010-05-25")
@@ -5411,7 +5451,7 @@ def plot_interpretation():
         ffm = True
         server = False
     #
-    if False: # VNSS1
+    if sta == 'VNSS':
         t0 = "2013-05-14"#'2009-06-14'#'2009-06-15'#'2019-11-09'#"2021-03-01"#"2005-11-10"#"2021-08-10"#'2021-09-18'
         t1 = "2013-06-13"#'2009-07-13'#'2009-07-13'#'2019-12-09'#"2021-03-31"#"2005-12-16"#"2021-09-09"#'2021-10-17'
         #
@@ -5424,6 +5464,15 @@ def plot_interpretation():
                                 'Sealing consolidation', 'Pressurization and eruption']
         plot_periods_col = ['gray', 'gray', 'gray', 'gray']
         ffm = False
+        #
+        if erup == 1:
+            plot_periods = ['2019 11 11 00 00 00','2019 11 23 00 00 00', '2019 12 02 00 00 00', '2019 12 06 12 00 00']
+            plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
+                                    'Sealing consolidation', 'Pressurization and eruption']
+            plot_periods_col = ['gray', 'gray', 'gray', 'gray']
+            #
+            ffm = True
+            server = False
     #
     if False: # BELO3
         t0 = "2007-10-22"#'2009-06-14'#'2009-06-15'#'2019-11-09'#"2021-03-01"#"2005-11-10"#"2021-08-10"#'2021-09-18'
@@ -5460,12 +5509,11 @@ def plot_interpretation():
     #
     if sta  == 'FWVZ':
         if erup == 1:
-            plot_periods = False#['2019 11 11 00 00 00','2019 11 22 00 00 00', '2019 12 03 00 00 00', '2019 12 06 12 00 00']
-            plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
-                                    'Sealing consolidation', 'Pressurization and eruption']
+            plot_periods = [ '2006 09 27 00 00 00', '2006 10 02 12 00 00']
+            plot_periods_label = ['Sealing consolidation', 'Pressurization and eruption']
             plot_periods_col = ['gray', 'gray', 'gray', 'gray']
             #
-            ffm = False
+            ffm = True
             server = True
         if erup == 2:
             plot_periods = False#['2019 11 11 00 00 00','2019 11 22 00 00 00', '2019 12 03 00 00 00', '2019 12 06 12 00 00']
@@ -5484,7 +5532,7 @@ def plot_interpretation():
             ffm = False
             server = True
     #
-    if sta  == 'TBTN':
+    if sta  == 'TBTN' or sta == 'T01':
         if erup == 1:
             plot_periods = False#['2019 11 11 00 00 00','2019 11 22 00 00 00', '2019 12 03 00 00 00', '2019 12 06 12 00 00']
             plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
@@ -5519,7 +5567,7 @@ def plot_interpretation():
         ffm = False
         server = False
     #
-    if sta  == 'ONTA':
+    if sta  == 'ONTA' or sta == 'VONK':
         #if erup == 1:
         plot_periods = False#['2019 11 11 00 00 00','2019 11 22 00 00 00', '2019 12 03 00 00 00', '2019 12 06 12 00 00']
         plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
@@ -5549,7 +5597,7 @@ def plot_interpretation():
         ffm = False
         server = False
     #
-    if sta  == 'POS' or sta  == 'DAM':
+    if sta  == 'POS' or sta  == 'DAM' or 'COP':
         #if erup == 1:
         plot_periods = False#['2019 11 11 00 00 00','2019 11 22 00 00 00', '2019 12 03 00 00 00', '2019 12 06 12 00 00']
         plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
@@ -5572,12 +5620,12 @@ def plot_interpretation():
                     'zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4',
                     'zsc2_dsarF__median'
                     ]
-            fts = ['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4',
-                    'zsc2_dsarF__median'
+            fts = [ 'zsc2_dsarF__median',
+                    'zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4'       
                     ]
-            col = ['g','b','r']
+            col = ['b','g','r']
             alpha = [1., 1., .5]
-            thick_line = [3., 6., 1.]
+            thick_line = [8., 3., 1.]
             #
             for i, ft in enumerate(fts):
                 if 'zsc2_dsarF' in ft:
@@ -5607,7 +5655,13 @@ def plot_interpretation():
                 ft_e1_v = ft_e1[0].loc[:,ft]
                 #
                 v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
-                v_plot = ft_e1_v/np.max(ft_e1_v)
+                if i == 0:
+                    v_plot = ft_e1_v
+                    v_plot_max = np.max(v_plot)
+                    pass
+                else:
+                    v_plot = ft_e1_v
+                    v_plot = v_plot/np.max(ft_e1_v) * v_plot_max#np.max(ft_e1_v)
                 #
                 if ft == 'zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4':
                     ft = 'nDSAR rate variance'#'DSAR change quantiles (.6-.4) variance'
@@ -5631,9 +5685,9 @@ def plot_interpretation():
                 #v_plot = data[data_stream].loc[inds]
                 inv_rsam = fm_e1.data.get_data(ti=t0, tf=t1)['rsamF']#.loc[ft_e1_t]
                 inv_rsam = 1./inv_rsam
-                ax1b.plot(ft_e1_t, inv_rsam/0.0035, '-', color= 'gray', linewidth=0.5, markersize=0.5, alpha = 1.)
+                ax1b.plot(ft_e1_t, inv_rsam, '-', color= 'gray', linewidth=0.5, markersize=0.5, alpha = .7)
                 ax1.plot([], [], '-', color= 'gray', markersize=1, label='1/RSAM', alpha = 1.0)
-                ax1b.set_ylim([0,1])
+                #ax1b.set_ylim([0,1])
                 ax1b.set_yticks([])
                 #
                 if False:
@@ -5668,12 +5722,13 @@ def plot_interpretation():
 
             #
             ax1.legend(loc = 2)
-            ax1.set_ylim([0,1])
+            #ax1.set_ylim([0,1])
             #
             te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
-            ax1.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+            #ax1.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
             #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-            ax1.set_yticks([])
+            #ax1.set_yticks([])
+            ax1.set_ylabel('normalized data')
             
             #ax1b.set_yticks([])
             ax1.grid()
@@ -5683,7 +5738,7 @@ def plot_interpretation():
         # subplot two: features median data
         # features
         if True:
-            fts2 = ['zsc2_mfF__median', 'zsc2_hfF__median', 'zsc2_rsamF__median']
+            fts2 = ['zsc2_mfF__median', 'zsc2_hfF__median']#, 'zsc2_rsamF__median']
             col = ['g','r','gray']
             alpha = [1., 1., 1.]
             thick_line = [3., 3., 3.]
@@ -5748,7 +5803,7 @@ def plot_interpretation():
             ax2.set_ylabel('normalized data')
             ax2.legend(loc = 2)
             te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
-            ax2.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+            #ax2.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
             #ax2.set_ylim([1,2])
             #ax2.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7))])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
             #ax.set_yticks([])
@@ -5829,7 +5884,7 @@ def plot_interpretation():
                     #ax3.plot([], color='k', linestyle='--', linewidth=2, label = 'event')
             #
             te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
-            ax3.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+            #ax3.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
             #ax3.set_ylim([1e9,1e13])
             ax3.set_yscale('log')
         #
@@ -5850,6 +5905,207 @@ def plot_interpretation():
     ##
     _plt_intp(sta,t0, t1)
     # 
+
+def plot_interpretation_media():
+    '''
+    one axis showing DSAR median and RSAM
+    '''
+    # define station and time
+    sta = 'WIZ'#'FWVZ'#'WIZ'
+    erup = 5
+    erup_time = datetimeify(erup_times[sta+'_'+str(erup)])
+    #erup_time = datetimeify('2021 09 09 00 00 00')
+    t0 = erup_time - 30*day#30*day
+    t1 = erup_time + 1*day#hour
+    #
+    if sta  == 'WIZ': #True: # WIZ5
+        if erup == 5:
+            plot_periods = ['2019 11 11 00 00 00','2019 11 23 00 00 00', '2019 12 02 00 00 00', '2019 12 06 12 00 00']
+            plot_periods_label = ['magma-geothermal system interaction', 'Pulsating gas flux', 
+                                    'Sealing consolidation', 'Pressurization and eruption']
+            plot_periods_col = ['gray', 'gray', 'gray', 'gray']
+            #
+            ffm = False
+            server = True
+    #
+    def _plt_intp(sta, t0, t1):
+        # figure
+        nrow = 1
+        ncol = 1
+        fig, ax1 = plt.subplots(nrows=nrow, ncols=ncol,figsize=(8,3))#(14,4))
+        #####################################################
+        # subplot one: normalize features
+        if True:
+            # features
+            fts = [ 'zsc2_dsarF__median']
+            col = ['b','g','r']
+            alpha = [1., 1., .5]
+            thick_line = [8., 3., 1.]
+            #
+            for i, ft in enumerate(fts):
+                if 'zsc2_dsarF' in ft:
+                    ds = ['zsc2_dsarF'] 
+                if 'zsc2_rsamF' in ft:
+                    ds = ['zsc2_rsamF']
+                if 'zsc2_mfF' in ft:
+                    ds = ['zsc2_mfF']
+                if 'zsc2_hfF' in ft:
+                    ds = ['zsc2_hfF']
+                #
+                if server:
+                    path_feat_serv = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\features_bkp\\features_server\\'
+                    fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
+                        look_forward=2., data_streams=ds, 
+                        feature_dir=path_feat_serv, 
+                        savefile_type='pkl') 
+                else:
+                    fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
+                        look_forward=2., data_streams=ds, savefile_type='csv')
+                ##
+                ft = ft.replace("-",'"')
+                # adding multiple Axes objects
+                ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
+                # extract values to plot 
+                ft_e1_t = ft_e1[0].index.values
+                ft_e1_v = ft_e1[0].loc[:,ft]
+                #
+                v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
+                if i == 0:
+                    v_plot = ft_e1_v
+                    v_plot_max = np.max(v_plot)
+                    pass
+                else:
+                    v_plot = ft_e1_v
+                    v_plot = v_plot/np.max(ft_e1_v) * v_plot_max#np.max(ft_e1_v)
+                #
+                if ft == 'zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4':
+                    ft = 'nDSAR rate variance'#'DSAR change quantiles (.6-.4) variance'
+                if ft == 'zsc2_dsarF__median':
+                    ft = 'nDSAR median'
+                if ft == 'zsc2_hfF__fft_coefficient__coeff_38__attr_"real"':
+                    ft = '75-minute nHF harmonic' #'HF Fourier coefficient 38'
+                #
+                if ft == 'zsc2_mfF__median':
+                    ft = 'nMF median'
+                if ft == 'zsc2_hfF__median':
+                    ft = 'nHF median'
+                if ft == 'zsc2_rsamF__median':
+                    ft = 'nRSAM median'
+                #
+                ax1.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i],label='Feature: '+ ft)
+                #
+            #
+            if plot_periods:
+                for k, t in enumerate(plot_periods):
+                    te = datetimeify(t)#fm_e1.data.tes[int(erup[-1:])-1]
+                    ax1.axvline(te, color=plot_periods_col[k], linestyle='-', linewidth=20, alpha = 0.2, zorder = 4)
+                    #ax3.plot([], color='k', linestyle='--', linewidth=2, label = 'event')
+
+
+            #
+            
+            #ax1.set_ylim([0,1])
+            #
+            te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
+            #ax1.set_xticks([te - 3*day*i for i in range(int(30/3)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+            #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+            #ax1.set_yticks([])
+            ax1.set_ylabel('DSAR')
+            
+            #ax1b.set_yticks([])
+            ax1.grid()
+            #ax.set_ylabel('feature value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+            #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+        #############################################
+        # subplot: data
+        # features
+        if True:
+            ax1b = ax1.twinx()
+            #
+            td = TremorData(station = sta)
+            #td.update(ti=t0, tf=t1)
+            data_streams = ['rsam']#, 'mf', 'rsam']#, 'dsarF']
+            label = ['RSAM']#,'MF','RSAM','DSAR']
+            #label = ['1/RSAM']
+
+            if type(data_streams) is str:
+                data_streams = [data_streams,]
+            if any(['_' in ds for ds in data_streams]):
+                td._compute_transforms()
+            #ax.set_xlim(*range)
+            # plot data for each year
+            norm= False
+            _range = [t0,t1]
+            log =False
+            col_def = None
+            data = td.get_data(*_range)
+            xi = datetime(year=1,month=1,day=1,hour=0,minute=0,second=0)
+            cols = ['k','g','gray','m',[0.5,0.5,0.5],[0.75,0.75,0.75]]
+            inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
+            i=0
+            for data_stream, col in zip(data_streams,cols):
+                v_plot = data[data_stream].loc[inds]
+                if log:
+                    v_plot = np.log10(v_plot)
+                if norm:
+                    v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
+                if label:
+                    if col_def:
+                        ax1b.plot(data.index[inds], v_plot, '-', color=col_def, linewidth=0.5, alpha = 1.0)
+                    else:
+                        ax1b.plot(data.index[inds], v_plot, '-', color=col, linewidth=0.5, alpha = 1.0)
+                else:
+                    ax1b.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=0.5, alpha = 1.0)
+                i+=1
+            for te in td.tes:
+                if [te>=datetimeify(_range[0]) and te<=datetimeify(_range[1])]:
+                    pass
+                    #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+            #
+            
+            #ax.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+            ax1b.set_xlim(_range)
+            ax1b.legend(loc = 2)
+            ax1b.grid()
+            if log:
+                ax1b.set_ylabel(' ')
+            else:
+                ax1b.set_ylabel('RSAM [\u03BC m/s]')
+            #ax3.set_xlabel('Time [month-day hour]')
+            #ax3.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
+            ax1b.set_ylim([1e2,1e4])
+            ax1b.set_yscale('log')
+        #
+        ax1.plot([], [], '-', color=col, alpha = 1.0, label = label[0])
+        #
+        if False:#erup_time: # plot vertical lines
+            te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
+            ax1.axvline(te, color='r',linestyle='--', linewidth=4, zorder = 6)
+            ax1b.axvline(te, color='r',linestyle='--', linewidth=4, zorder = 6)
+            ax1.plot([], color='r', linestyle='--', linewidth=4, label = 'eruption')
+        #
+        if False: # 
+            te = datetimeify('2019-11-18 12:00:00')#fm_e1.data.tes[int(erup[-1:])-1]
+            ax1.axvline(te, color='m',linestyle='--', linewidth=4, zorder = 6)
+            ax1b.axvline(te, color='m',linestyle='--', linewidth=4, zorder = 6)
+            ax1.plot([], color='m', linestyle='--', linewidth=4, label = 'VAL: 1 > 2')
+        #
+        ax1.set_xticks([t1 - 5*day*i for i in range(int(30/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+        #ax1.legend(loc = 2)
+        ax1.set_xlim([t0,t1])
+        #
+        ax1.grid(color='gray', linestyle='-', linewidth=.3, alpha = 0.5)
+        #####################################################
+        #fig.suptitle(sta_code[sta]+': '+str(t0)+' to '+str(t1))#'Feature: '+ ft_nm_aux, ha='center')
+        fig.suptitle('Whakaari 2019 eruption timeline')#'Feature: '+ ft_nm_aux, ha='center')
+        plt.tight_layout()
+        path = '..'+os.sep+'features'+os.sep+'correlations'+os.sep+'comb_feat_analysis'+os.sep
+        #plt.savefig(path+erup+'_'+ft_id+'.png')
+        plt.show()
+        plt.close()
+    ##
+    _plt_intp(sta,t0, t1)
+    #     
 
 def ext_pval_anal():
     '''
@@ -6870,12 +7126,12 @@ def main():
     #corr_feat_calc()
     #corr_feat_analysis()
     #plot_corr_feat_dendrogram()
-    #download_geonet_data()
+    download_geonet_data()
     #plot_other_data_geonet()
     #plot_interpretation()
-    ext_pval_anal()
+    #plot_interpretation_media()
+    #ext_pval_anal()
 
 if __name__ == "__main__":
     main()
-
 
