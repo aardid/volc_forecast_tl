@@ -12,11 +12,12 @@ from copy import copy
 from matplotlib import pyplot as plt
 from inspect import getfile, currentframe
 from glob import glob
+from obspy.clients.fdsn.header import FDSNException
 import pandas as pd
 from pandas._libs.tslibs.timestamps import Timestamp
 from multiprocessing import Pool, cpu_count
 from textwrap import wrap
-from time import time
+from time import time, sleep
 from scipy.integrate import cumtrapz
 from scipy.signal import stft
 from scipy.optimize import curve_fit
@@ -62,6 +63,120 @@ _DAY = timedelta(days=1.)
 
 makedir = lambda name: os.makedirs(name, exist_ok=True)
 
+STATIONS = {
+    'WIZ':{
+        'client_name':"GEONET",
+        'nrt_name':'https://service-nrt.geonet.org.nz',
+        'channel':'HHZ',
+        'network':'NZ'
+        },
+    'KRVZ':{
+        'client_name':"GEONET",
+        'nrt_name':'https://service-nrt.geonet.org.nz',
+        'channel':'EHZ',
+        'network':'NZ'
+        },
+    'FWVZ':{
+        'client_name':"GEONET",
+        'nrt_name':'https://service-nrt.geonet.org.nz',
+        'channel':'HHZ',
+        'network':'NZ'
+        },
+    'PVV':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'PV6':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'OKWR':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'VNSS':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'SSLW':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'REF':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'EHZ',
+        'network':'AV'
+        },
+    'BELO':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'HHZ',
+        'network':'YC'
+        },
+    'CRPO':{
+        'client_name':"IRIS",
+        'nrt_name':'https://service.iris.edu',
+        'channel':'HHZ',
+        'network':'OV'
+        },
+    'IVGP':{
+            'client_name':'https://webservices.ingv.it',
+            'nrt_name':'https://webservices.ingv.it',
+            'channel':'HHZ',
+            'network':'IV',
+            'location':'*'
+            },
+    'AUS':{
+            'client_name':'IRIS',
+            'nrt_name':'https://service.iris.edu',
+            'channel':'EHZ',
+            'network':'AV',
+            'location':'*',
+            },
+    'GOD':{
+            'client_name':' ',
+            'nrt_name':' ',
+            'channel':' ',
+            'network':' ',
+            'location':' ',
+            },
+    'ONTA':{
+            'client_name':' ',
+            'nrt_name':' ',
+            'channel':' ',
+            'network':' ',
+            'location':' ',
+            },
+    'NPT':{
+            'client_name':' ',
+            'nrt_name':' ',
+            'channel':' ',
+            'network':' ',
+            'location':' ',
+            },
+    'POS':{
+            'client_name':' ',
+            'nrt_name':' ',
+            'channel':' ',
+            'network':' ',
+            'location':' ',
+            }
+    }
+
+
+RATIO_NAMES=['vlar','lrar','rmar','dsar']
+BANDS = ['vlf','lf','rsam','mf','hf']
 class TremorData(object):
     """ Object to manage acquisition and processing of seismic data.
         
@@ -73,7 +188,6 @@ class TremorData(object):
             Beginning of data range.
         t1 : datetime.datetime
             End of data range.
-
         Methods:
         --------
         update
@@ -83,11 +197,17 @@ class TremorData(object):
         plot
             Plot tremor data.
     """
-    def __init__(self, station='WIZ', parent=None):
+    def __init__(self, station='WIZ', parent=None, data_dir=None, erup_file=None):
         self.station = station
         self.n_jobs = 6
         self.parent = parent
-        self.file = os.sep.join(getfile(currentframe()).split(os.sep)[:-2]+['data','{:s}_tremor_data.csv'.format(station)])
+        self.data_dir = data_dir
+        self.erup_file = erup_file
+        if self.data_dir is not None:
+            self._wd = lambda x: os.sep.join([self.data_dir,x])
+        else:
+            self._wd = lambda x: os.sep.join(getfile(currentframe()).split(os.sep)[:-2]+['data',x])
+        self.file = self._wd('{:s}_tremor_data.csv'.format(station))
         self._assess()
     def __repr__(self):
         if self.exists:
@@ -96,63 +216,33 @@ class TremorData(object):
             return 'TremorData:{:d}/{:02d}/{:02d} {:02d}:{:02d} to {:d}/{:02d}/{:02d} {:02d}:{:02d}'.format(*tm)
         else:
             return 'no data'
+    def _all_cols(self):
+        return RATIO_NAMES+[r+'F' for r in RATIO_NAMES]+BANDS+[b+'F' for b in BANDS]
     def _assess(self):
         """ Load existing file and check date range of data.
         """
         # get eruptions
-        #with open(os.sep.join(getfile(currentframe()).split(os.sep)[:-2]+['data','eruptive_periods.txt']),'r') as fp:
-        #    self.tes = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
-        ## testing
-        with open(os.sep.join(getfile(currentframe()).split(os.sep)[:-2]+['data',self.station+'_eruptive_periods.txt']),'r') as fp:
-            self.tes = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
-        ## end testing
+        if not self.erup_file:
+            with open(self._wd(self.station+'_eruptive_periods.txt'),'r') as fp:
+                self.tes = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
+        if self.erup_file:
+            with open(self.erup_file,'r') as fp:
+                self.tes = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
         # check if data file exists
         self.exists = os.path.isfile(self.file)
         if not self.exists:
-            if self.station == 'WIZ':
-                t0 = datetime(2011,1,1)
-                t1 = datetime(2011,1,2)
-            elif self.station == 'WSRZ':
-                t0 = datetime(2013,5,1)
-                t1 = datetime(2013,5,2)
-            elif self.station == 'FWVZ':
-                t0 = datetime(2006,1,3)
-                t1 = datetime(2006,1,4)
-            elif self.station == 'KRVZ':
-                t0 = datetime(2006,1,2)
-                t1 = datetime(2006,1,3)
-            elif self.station == 'PV6':
-                t0 = datetime(2010,1,2)
-                t1 = datetime(2010,1,3)
-            elif self.station == 'PVV':
-                t0 = datetime(2014,1,1)
-                t1 = datetime(2014,1,2)
-            elif self.station == 'BELO':
-                t0 = datetime(2007,1,1)
-                t1 = datetime(2007,1,2)
-            elif self.station == 'OKWR':
-                t0 = datetime(2008,1,1)
-                t1 = datetime(2008,1,2)
-            elif self.station == 'VNSS':
-                t0 = datetime(2013,1,1)
-                t1 = datetime(2013,1,2)
-            elif self.station == 'SSLW':
-                t0 = datetime(2014,1,1)
-                t1 = datetime(2014,1,2)
-            elif self.station == 'CRPO':
-                t0 = datetime(2016,1,1)
-                t1 = datetime(2016,1,2)
-            elif self.station == 'REF':
-                t0 = datetime(2006,1,1)
-                t1 = datetime(2006,1,2)
-            else:
-                raise ValueError("No file for {:s} - when should I start downloading?".format(self.station))
-            self.update(t0,t1)
+            cols = self._all_cols()
+            # pd.DataFrame(zip(*datas), columns=columns, index=pd.Series(time))
+            df = pd.DataFrame(columns=cols)
+            df.to_csv(self.file, index_label='time')
         # check date of latest data in file
         self.df = load_dataframe(self.file, index_col=0, parse_dates=[0,], infer_datetime_format=True)
-        # self.df = pd.read_csv(self.file, index_col=0, parse_dates=[0,], infer_datetime_format=True)
-        self.ti = self.df.index[0]
-        self.tf = self.df.index[-1]
+        if len(self.df.index)>0:
+            self.ti = self.df.index[0]
+            self.tf = self.df.index[-1]
+        else:
+            self.ti = None
+            self.tf = None
     def _check_transform(self, name):
         if name not in self.df.columns and name in self.parent.data_streams:
             return True
@@ -160,7 +250,6 @@ class TremorData(object):
             return False
     def _compute_transforms(self):
         """ Compute data transforms.
-
             Notes:
             ------
             Naming convention is *transform_type*_*data_type*, so for example
@@ -274,17 +363,14 @@ class TremorData(object):
                 self.df['diff_zsc2_'+col] = self.df['diff_zsc2_'+col].rolling(window=2).min()
                 self.df['diff_zsc2_'+col] = self.df[col].diff()
                 self.df['diff_zsc2_'+col][0] = 0.
-
     def _is_eruption_in(self, days, from_time):
         """ Binary classification of eruption imminence.
-
             Parameters:
             -----------
             days : float
                 Length of look-forward.
             from_time : datetime.datetime
                 Beginning of look-forward period.
-
             Returns:
             --------
             label : int
@@ -297,7 +383,6 @@ class TremorData(object):
         return 0.
     def update(self, ti=None, tf=None, n_jobs = None):
         """ Obtain latest GeoNet data.
-
             Parameters:
             -----------
             ti : str, datetime.datetime
@@ -311,25 +396,30 @@ class TremorData(object):
         makedir('_tmp')
 
         # default data range if not given 
-        ti = ti or datetime(self.tf.year,self.tf.month,self.tf.day,0,0,0)
+        if ti is None:
+            if self.tf is not None:
+                ti = datetime(self.tf.year,self.tf.month,self.tf.day,0,0,0)
+            else:
+                ti = self._probe_start()
+                
         tf = tf or datetime.today() + _DAY
         
         ti = datetimeify(ti)
         tf = datetimeify(tf)
 
         ndays = (tf-ti).days
+        # ndays = 5
 
         # parallel data collection - creates temporary files in ./_tmp
         pars = [[i,ti,self.station] for i in range(ndays)]
-        n_jobs = self.n_jobs if n_jobs is None else n_jobs
-        n_jobs = 6
-        if False: # serial 
+        n_jobs = self.n_jobs if n_jobs is None else n_jobs   
+        if n_jobs == 1: # serial 
             print('Station '+self.station+': Downloading data in serial')
             for par in pars:
                 print(str(par[0]+1)+'/'+str(len(pars)))
                 #print(str(par))
                 get_data_for_day(*par)
-        else: # paralel
+        else: # parallel
             print('Station '+self.station+': Downloading data in parallel')
             print('From: '+ str(ti))
             print('To: '+ str(tf))
@@ -339,24 +429,9 @@ class TremorData(object):
             p.close()
             p.join()
 
-        # special case of no file to update - create new file
-        if not self.exists:
-            # testing
-            try:
-                shutil.copyfile('_tmp/_tmp_fl_00000.csv',self.file)
-            except:
-                try:
-                    shutil.copyfile('_tmp/_tmp_fl_00001.csv',self.file)
-                except:
-                  f = open(self.file, 'w')
-                  f.close()      
-            # end testing
-            self.exists = True
-            shutil.rmtree('_tmp')
-            return
-
         # read temporary files in as dataframes for concatenation with existing data
-        dfs = [self.df[['dsar','dsarF','hf','hfF','mf','mfF','rsam','rsamF']]]
+        cols = self._all_cols()
+        dfs = [self.df[cols]]
         for i in range(ndays):
             fl = '_tmp/_tmp_fl_{:05d}.csv'.format(i)
             if not os.path.isfile(fl): 
@@ -372,25 +447,30 @@ class TremorData(object):
 
         self.df = self.df.resample('10T').interpolate('linear')
 
-        # remove artefact in computing dsar
-        for i in range(1,int(np.floor(self.df.shape[0]/(24*6)))): 
-            ind = i*24*6
-            self.df['dsar'][ind] = 0.5*(self.df['dsar'][ind-1]+self.df['dsar'][ind+1])
+        # # remove artefact in computing dsar
+        # for i in range(1,int(np.floor(self.df.shape[0]/(24*6)))): 
+        #     ind = i*24*6
+        #     self.df['dsar'][ind] = 0.5*(self.df['dsar'][ind-1]+self.df['dsar'][ind+1])
 
         save_dataframe(self.df, self.file, index=True)
         self.ti = self.df.index[0]
         self.tf = self.df.index[-1]
-        
+    def _probe_start(self, before=None):
+        ''' Tries to figue out when the first available data for a station is.
+        '''  
+        s = STATIONS[self.station]
+        client = FDSNClient(s['client_name'])    
+        site = client.get_stations(station=self.station, level="response", channel=s['channel'])
+        return site.networks[0].stations[0].start_date
+
     def get_data(self, ti=None, tf=None):
         """ Return tremor data in requested date range.
-
             Parameters:
             -----------
             ti : str, datetime.datetime
                 Date of first data point (default is earliest data).
             tf : str, datetime.datetime
                 Date of final data point (default is latest data).
-
             Returns:
             --------
             df : pandas.DataFrame
@@ -411,7 +491,6 @@ class TremorData(object):
         return self.df.loc[inds]
     def plot(self, data_streams='rsam', save='tremor_data.png', ylim=None):
         """ Plot tremor data.
-
             Parameters:
             -----------
             save : str
@@ -427,14 +506,12 @@ class TremorData(object):
             mf - 4.5 to 8 Hz (medium frequency)
             hf - 8 to 16 Hz (high frequency)
             dsar - ratio of mf to hf, rolling median over 180 days
-
             transform options:
             ------------------
             inv - inverse, i.e., 1/
             diff - finite difference derivative
             log - base 10 logarithm
             stft - short-time Fourier transform at 40-45 min period
-
             Example:
             --------
             data_streams = ['dsar', 'diff_hf'] will plot the DSAR signal and the derivative of the HF signal.
@@ -482,7 +559,7 @@ class TremorData(object):
         axs[-1].legend()
         
         plt.savefig(save, dpi=400)
-    def plot_zoom(self, data_streams='rsamF', save=None, range=None, label = None, col_def = None, norm = None):
+    def plot_zoom(self, data_streams='rsamF', save=None, range=None, label = None, col_def = None, norm = None, log = None):
         """ Plot tremor data.
 
             Parameters:
@@ -518,34 +595,42 @@ class TremorData(object):
             self._compute_transforms()
 
         # adding multiple Axes objects  
-        fig, ax = plt.subplots(1, 1, figsize=(15,5))
+        fig, ax = plt.subplots(1, 1, figsize=(12,3))
         #ax.set_xlim(*range)
         # plot data for each year
         data = self.get_data(*range)
         xi = datetime(year=1,month=1,day=1,hour=0,minute=0,second=0)
         cols = ['c','g','r','b',[0.5,0.5,0.5],[0.75,0.75,0.75]]
         inds = (data.index>=datetimeify(range[0]))&(data.index<=datetimeify(range[1]))
+        i=0
         for data_stream, col in zip(data_streams,cols):
             v_plot = data[data_stream].loc[inds]
+            if log:
+                v_plot = np.log10(v_plot)
             if norm:
                 v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
             if label:
                 if col_def:
-                    ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label)
+                    ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], alpha = 0.8)
                 else:
-                    ax.plot(data.index[inds], v_plot, '-', color=col, label=label, alpha = 0.7)
+                    ax.plot(data.index[inds], v_plot, '-', color=col, label=label[i], alpha = 0.8)
             else:
-                ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream)
+                ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, alpha = 0.8)
+            i+=1
         for te in self.tes:
             if [te>=datetimeify(range[0]) and te<=datetimeify(range[1])]:
-                ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+                pass
+                #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
         #
-        ax.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+        #ax.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
         ax.set_xlim(*range)
         ax.legend(loc = 2)
         ax.grid()
-        ax.set_ylabel('rsam')
-        ax.set_xlabel('Time [year-month]')
+        if log:
+            ax.set_ylabel('log10(RSAM)')
+        else:
+            ax.set_ylabel('RSAM')
+        ax.set_xlabel('Time [month-day hour]')
         ax.title.set_text('Station '+self.station+': Tremor data')
         #plt.show()
         if not save:
@@ -553,14 +638,12 @@ class TremorData(object):
         plt.savefig(save, dpi=400)
     def plot_intp_data(self, save=None, range_dates=None):
         """ Plot interpolated tremor data
-
             Parameters:
             -----------
             save : str
                 Name of file to save output.
             range_dates : list
                 Two-element list indicating time range boundary
-
             Example:
             --------
         """
@@ -634,7 +717,6 @@ class ForecastModel(object):
             Tw is the window length, eta is overlap fraction, Tlf is look-forward and ds are data streams.
         savefile_type : str
             Extension denoting file format for save/load. Options are csv, pkl (Python pickle) or hdf.
-
         Attributes:
         -----------
         data : TremorData
@@ -692,7 +774,6 @@ class ForecastModel(object):
             File to save feature matrix to.
         preddir : str
             Directory to save forecast model predictions.
-
         Methods:
         --------
         _detect_model
@@ -732,7 +813,7 @@ class ForecastModel(object):
     """
     def __init__(self, window, overlap, look_forward, exclude_dates=[], station=None, ti=None, tf=None, 
         data_streams=['rsam','mf','hf','dsar'], root=None, savefile_type='pkl', feature_root=None, 
-        feature_dir=None):
+        feature_dir=None, data_dir=None, erup_file=None):
         self.window = window
         self.overlap = overlap
         if station is None:
@@ -741,7 +822,7 @@ class ForecastModel(object):
         self.exclude_dates = exclude_dates
         self.look_forward = look_forward
         self.data_streams = data_streams
-        self.data = TremorData(self.station, parent=self)
+        self.data = TremorData(self.station, parent=self, data_dir=data_dir, erup_file=erup_file)
         if any(['_' in ds for ds in data_streams]):
             self.data._compute_transforms()
         if any([d not in self.data.df.columns for d in self.data_streams]):
@@ -818,7 +899,6 @@ class ForecastModel(object):
     def _construct_windows(self, Nw, ti, ds, i0=0, i1=None, indx = None):
         """ 
         Create overlapping data windows for feature extraction.
-
         Parameters:
         -----------
         Nw : int
@@ -831,7 +911,6 @@ class ForecastModel(object):
             Skip i1 final windows.
         indx : list of datetime.datetime
             Computes only windows for requested index list
-
         Returns:
         --------
         df : pandas.DataFrame
@@ -873,21 +952,18 @@ class ForecastModel(object):
     def _extract_features(self, ti, tf, ds, yr=None):
         """ 
             Extract features from windowed data.
-
             Parameters:
             -----------
             ti : datetime.datetime
                 End of first window.
             tf : datetime.datetime
                 End of last window.
-
             Returns:
             --------
             fm : pandas.Dataframe
                 tsfresh feature matrix extracted from data windows.
             ys : pandas.Dataframe
                 Label vector corresponding to data windows
-
             Notes:
             ------
             Saves feature matrix to $rootdir/features/$root_features.csv to avoid recalculation.
@@ -1004,7 +1080,6 @@ class ForecastModel(object):
         t1 = df.index[-1]+self.dt
         print('{:s} feature extraction {:s} to {:s}'.format(df.columns[0], t0.strftime('%Y-%m-%d'), t1.strftime('%Y-%m-%d')))
         return extract_features(df, **kw)
-
     def _const_wd_extr_ft(self, Nw, ti, ds, indx = None):
         'Construct windows, extract features and return dataframe'
         # features to compute
@@ -1014,7 +1089,7 @@ class ForecastModel(object):
         else:
             # drop features if relevant
             _ = [cfp.pop(df) for df in self.drop_features if df in list(cfp.keys())]
-        kw = {'column_id':'id', 'n_jobs':0,
+        kw = {'column_id':'id', 'n_jobs':self.n_jobs,
             'default_fc_parameters':cfp, 'impute_function':impute}
         # construct_windows/extract_features for subsets
         df, wd = self._construct_windows(Nw, ti, ds, indx = indx)
@@ -1031,28 +1106,25 @@ class ForecastModel(object):
         return ftfl   
     def _get_label(self, ts):
         """ Compute label vector.
-
             Parameters:
             -----------
             t : datetime like
                 List of dates to inspect look-forward for eruption.
-
             Returns:
             --------
             ys : list
                 Label vector.
         """
-        return [self.data._is_eruption_in(days=self.look_forward, from_time=t) for t in pd.to_datetime(ts)]
+        ys = [self.data._is_eruption_in(days=self.look_forward, from_time=t) for t in pd.to_datetime(ts)]
+        return ys #[self.data._is_eruption_in(days=self.look_forward, from_time=t) for t in pd.to_datetime(ts)]
     def _load_data(self, ti, tf, yr=None):
         """ Load feature matrix and label vector.
-
             Parameters:
             -----------
             ti : str, datetime
                 Beginning of period to load features.
             tf : str, datetime
                 End of period to load features.
-
             Returns:
             --------
             fM : pd.DataFrame
@@ -1110,14 +1182,12 @@ class ForecastModel(object):
         return fM, ys
     def _drop_features(self, X, drop_features):
         """ Drop columns from feature matrix.
-
             Parameters:
             -----------
             X : pd.DataFrame
                 Matrix to drop columns.
             drop_features : list
                 tsfresh feature names or calculators to drop from matrix.
-
             Returns:
             --------
             Xr : pd.DataFrame
@@ -1139,7 +1209,6 @@ class ForecastModel(object):
         return X
     def _exclude_dates(self, X, y, exclude_dates):
         """ Drop rows from feature matrix and label vector.
-
             Parameters:
             -----------
             X : pd.DataFrame
@@ -1150,7 +1219,6 @@ class ForecastModel(object):
                 List of time windows to exclude during training. Facilitates dropping of eruption 
                 windows within analysis period. E.g., exclude_dates = [['2012-06-01','2012-08-01'],
                 ['2015-01-01','2016-01-01']] will drop Jun-Aug 2012 and 2015-2016 from analysis.
-
             Returns:
             --------
             Xr : pd.DataFrame
@@ -1168,13 +1236,11 @@ class ForecastModel(object):
         return X,y
     def _collect_features(self, save=None):
         """ Aggregate features used to train classifiers by frequency.
-
             Parameters:
             -----------
             save : None or str
                 If given, name of file to save feature frequencies. Defaults to all.fts
                 if model directory.
-
             Returns:
             --------
             labels : list
@@ -1204,7 +1270,6 @@ class ForecastModel(object):
         return labels, freqs
     def _model_alerts(self, t, y, threshold, ialert, dti):
         """ Compute issued alerts for model consensus.
-
             Parameters:
             -----------
             t : array-like
@@ -1217,7 +1282,6 @@ class ForecastModel(object):
                 Number of data windows spanning an alert period.
             dti : datetime.timedelta
                 Length of window overlap.
-
             Returns:
             --------
             false_alert : int
@@ -1296,7 +1360,6 @@ class ForecastModel(object):
     # public methods
     def get_features(self, ti=None, tf=None, n_jobs=1, drop_features=[], compute_only_features=[]):
         """ Return feature matrix and label vector for a given period.
-
             Parameters:
             -----------
             ti : str, datetime.datetime
@@ -1327,7 +1390,6 @@ class ForecastModel(object):
     def train(self, ti=None, tf=None, Nfts=20, Ncl=500, retrain=False, classifier="DT", random_seed=0,
             drop_features=[], n_jobs=6, exclude_dates=[], use_only_features=[], method=0.75):
         """ Construct classifier models.
-
             Parameters:
             -----------
             ti : str, datetime.datetime
@@ -1353,7 +1415,6 @@ class ForecastModel(object):
                 List of time windows to exclude during training. Facilitates dropping of eruption 
                 windows within analysis period. E.g., exclude_dates = [['2012-06-01','2012-08-01'],
                 ['2015-01-01','2016-01-01']] will drop Jun-Aug 2012 and 2015-2016 from analysis.
-
             Classifier options:
             -------------------
             SVM - Support Vector Machine.
@@ -1396,6 +1457,9 @@ class ForecastModel(object):
         # manually drop features (columns)
         fM = self._drop_features(fM, drop_features)
 
+        a = fM.columns
+        b = a.values
+
         # manually select features (columns)
         if len(self.use_only_features) != 0:
             use_only_features = [df for df in self.use_only_features if df in fM.columns]
@@ -1434,7 +1498,6 @@ class ForecastModel(object):
         self._collect_features()
     def forecast(self, ti=None, tf=None, recalculate=False, use_model=None, n_jobs=None, yr=None):
         """ Use classifier models to forecast eruption likelihood.
-
         Parameters:
         -----------
         ti : str, datetime.datetime
@@ -1448,7 +1511,6 @@ class ForecastModel(object):
             Optionally pass path to pre-trained model directory in 'models'.
         n_jobs : int
             Number of cores to use.
-
         Returns:
         --------
         consensus : pd.DataFrame
@@ -1564,7 +1626,6 @@ class ForecastModel(object):
     def hires_forecast(self, ti, tf, recalculate=True, save=None, root=None, nztimezone=False, 
         n_jobs=None, threshold=0.8, alt_rsam=None, xlim=None):
         """ Construct forecast at resolution of data.
-
             Parameters:
             -----------
             ti : str, datetime.datetime
@@ -1618,7 +1679,6 @@ class ForecastModel(object):
     # plotting methods
     def _compute_CI(self, y):
         """ Computes a 95% confidence interval of the model consensus.
-
         Parameters:
         -----------
         y : numpy.array
@@ -1633,7 +1693,6 @@ class ForecastModel(object):
         return ci
     def plot_forecast(self, ys, threshold=0.75, save=None, xlim=['2019-12-01','2020-02-01']):
         """ Plot model forecast.
-
             Parameters:
             -----------
             ys : pandas.DataFrame
@@ -1715,7 +1774,6 @@ class ForecastModel(object):
         plt.close(f)
     def _plot_hires_forecast(self, ys, save, threshold=0.75, station='WIZ', nztimezone=False, alt_rsam=None, xlim=None):
         """ Plot model hires version of model forecast (single axes).
-
             Parameters:
             -----------
             ys : pandas.DataFrame
@@ -1842,14 +1900,12 @@ class ForecastModel(object):
         return FP, FN, TP, TN, dur, MCC
     def plot_accuracy(self, ys, save=None):
         """ Plot performance metrics for model.
-
             Parameters:
             -----------
             ys : pandas.DataFrame
                 Model forecast returned by ForecastModel.forecast.
             save : str
                 File name to save figure.
-
         """
         makedir(self.plotdir)
         if save is None:
@@ -1899,7 +1955,6 @@ class ForecastModel(object):
         plt.close(f)
     def plot_features(self, N=10, save=None):
         """ Plot frequency of extracted features by most significant.
-
             Parameters:
             -----------
             N : int
@@ -1986,7 +2041,6 @@ class ForecastModel(object):
         plt.close(f)
     def plot_feature_correlation(self, N=20, save=None):
         """ Corner plot of feature correlation.
-
             Parameters:
             -----------
             N : int
@@ -2085,19 +2139,16 @@ def load_dataframe(fl, index_col=None, parse_dates=False, usecols=None, infer_da
 
 def get_classifier(classifier):
     """ Return scikit-learn ML classifiers and search grids for input strings.
-
         Parameters:
         -----------
         classifier : str
             String designating which classifier to return.
-
         Returns:
         --------
         model : 
             Scikit-learn classifier object.
         grid : dict
             Scikit-learn hyperparameter grid dictionarie.
-
         Classifier options:
         -------------------
         SVM - Support Vector Machine.
@@ -2139,9 +2190,21 @@ def get_classifier(classifier):
     
     return model, grid
 
+def get_data_from_stream(st, site):  
+    if len(st.traces) == 0:
+        raise
+    elif len(st.traces) > 1:
+        try:
+            st.merge(fill_value='interpolate').traces[0]
+        except Exception:
+            st.interpolate(100).merge(fill_value='interpolate').traces[0]
+              
+    st.remove_sensitivity(inventory=site)
+    # st.detrend('linear')
+    return st.traces[0].data
+
 def get_data_for_day(i,t0,station):
     """ Download WIZ data for given 24 hour period, writing data to temporary file.
-
         Parameters:
         -----------
         i : integer
@@ -2151,69 +2214,89 @@ def get_data_for_day(i,t0,station):
         
     """
     t0 = UTCDateTime(t0)
-
-    # open clients
-    if station in ['PV6','PVV','BELO','OKWR','VNSS','SSLW','CRPO','REF']:
-        client = FDSNClient("IRIS")
-        client_nrt = FDSNClient('http://service.iris.edu')        
-    else:
-        client = FDSNClient("GEONET")
-        client_nrt = FDSNClient('https://service-nrt.geonet.org.nz')
     
     daysec = 24*3600
-    fbands = [[2, 5], [4.5, 8], [8,16]]
-    names = ['rsam','mf','hf']
-    frs = [200, 100, 50]
+    fbands = [[0.01,0.1],[0.1,2],[2, 5], [4.5, 8], [8,16]]
+    names = BANDS
+    frs = [200,200,200, 100, 50]
+
+    F = 100 # frequency
+    D = 1   # decimation factor
+    S = STATIONS[station]
+    try:
+        S['location']
+    except KeyError:
+        S['location']=None
+
+    attempts = 0    
+    while True:
+        try:
+            client = FDSNClient(S['client_name'])
+            client_nrt = FDSNClient(S['nrt_name'])
+            break
+        except FDSNException:
+            sleep(30)
+            attempts += 1
+            pass
+        if attempts > 10:
+            raise FDSNException('timed out after 10 attempts, couldn\'t connect to FDSN service')
+
 
     # download data
     datas = []
     columns = []
     try:
-        channel = 'HHZ'
-        if station in ['KRVZ','PV6','PVV','OKWR','VNSS','SSLW','REF']:
-            channel = 'EHZ'
-        site = client.get_stations(starttime=t0+i*daysec, endtime=t0 + (i+1)*daysec, station=station, level="response", channel=channel)
-    except FDSNNoDataException:
-        pass
+        site = client.get_stations(starttime=t0+i*daysec, endtime=t0 + (i+1)*daysec, station=station, level="response", channel=S['channel'])
+    except (FDSNNoDataException, FDSNException):
+        return
 
+    pad_f=0.1
     try:
-        if station in ['PV6','PVV','OKWR','VNSS','SSLW','REF']:
-            WIZ = client.get_waveforms('AV',station, None, channel, t0+i*daysec, t0 + (i+1)*daysec)
-        elif station in ['BELO']:
-            WIZ = client.get_waveforms('YC',station, None, channel, t0+i*daysec, t0 + (i+1)*daysec)
-        elif station in ['CRPO']:
-            WIZ = client.get_waveforms('OV',station, None, channel, t0+i*daysec, t0 + (i+1)*daysec)
-        else:     
-            WIZ = client.get_waveforms('NZ',station, "10", channel, t0+i*daysec, t0 + (i+1)*daysec)
+        st = client.get_waveforms(S['network'],station, S['location'], S['channel'], t0+(i-pad_f)*daysec, t0 + (i+1+pad_f)*daysec)
         
         # if less than 1 day of data, try different client
-        if len(WIZ.traces[0].data) < 600*100:
+        data = get_data_from_stream(st, site)
+        if data is None: return
+        if len(data) < 600*F:
             raise FDSNNoDataException('')
-    except (ObsPyMSEEDFilesizeTooSmallError,FDSNNoDataException) as e:
+    except (ValueError,ObsPyMSEEDFilesizeTooSmallError,FDSNNoDataException,FDSNException) as e:
         try:
-            WIZ = client_nrt.get_waveforms('NZ',station, "10", "HHZ", t0+i*daysec, t0 + (i+1)*daysec)
-        except FDSNNoDataException:
+            st = client_nrt.get_waveforms(S['network'],station, S['location'], S['channel'], t0+(i-pad_f)*daysec, t0 + (i+1+pad_f)*daysec)
+            data = get_data_from_stream(st, site)
+        except (FDSNNoDataException,ValueError,FDSNException):
             return
 
+    # st.taper(max_percentage=0.05, type="hann")
+    if D>1:
+        st.decimate(D)
+        F=F//D
+    data = st.traces[0]
+    i0=int((t0+i*daysec-st.traces[0].meta['starttime'])*F)+1
+    if i0<0:
+        return
+    if i0 >= len(data):
+        return
+    i1=int(24*3600*F)
+    if (i0+i1)>len(data):
+        i1 = len(data)
+    else:
+        i1 += i0
     # process frequency bands
-    WIZ.remove_sensitivity(inventory=site)
-    data = WIZ.traces[0].data
-    dataI = cumtrapz(data, dx=1./100, initial=0)
-    ti = WIZ.traces[0].meta['starttime']
+    dataI = cumtrapz(data, dx=1./F, initial=0)
+    dataI -= dataI[i0]
+    ti = st.traces[0].meta['starttime']+timedelta(seconds=(i0+1)/F)
         # round start time to nearest 10 min increment
     tiday = UTCDateTime("{:d}-{:02d}-{:02d} 00:00:00".format(ti.year, ti.month, ti.day))
     ti = tiday+int(np.round((ti-tiday)/600))*600
-    N = 600*100                             # 10 minute windows in seconds
-    m = len(data)//N
+    N = 600*F                             # 10 minute windows in seconds
+    m = (i1-i0)//N
     Nm = N*m       # number windows in data
     
     # apply filters and remove filter response
     _datas = []; _dataIs = []
     for (fmin,fmax),fr in zip(fbands,frs):
-        _data = abs(bandpass(data, fmin, fmax, 100))*1.e9
-        _dataI = abs(bandpass(dataI, fmin, fmax, 100))*1.e9
-        _data[:fr] = np.mean(_data[fr:600])
-        _dataI[:fr] = np.mean(_dataI[fr:600])
+        _data = abs(bandpass(data, fmin, fmax, F)[i0:i1])*1.e9
+        _dataI = abs(bandpass(dataI, fmin, fmax, F)[i0:i1])*1.e9
         _datas.append(_data)
         _dataIs.append(_dataI)
     
@@ -2221,7 +2304,7 @@ def get_data_for_day(i,t0,station):
     outliers = []
     maxIdxs = [] 
     for k in range(m):
-        outlier, maxIdx = outlierDetection(_datas[0][k*N:(k+1)*N])
+        outlier, maxIdx = outlierDetection(_datas[2][k*N:(k+1)*N])
         outliers.append(outlier)
         maxIdxs.append(maxIdx)
 
@@ -2229,12 +2312,11 @@ def get_data_for_day(i,t0,station):
     f = 0.1 # Asymmetry factor
     numSubDomains = 4
     subDomainRange = N//numSubDomains # No. data points per subDomain    
-    for _data,name,fr in zip(_datas, names, frs):
+    for _data,name in zip(_datas, names):
         dr = []
         df = []
         for k, outlier, maxIdx in zip(range(m), outliers, maxIdxs):
             domain = _data[k*N:(k+1)*N]
-            domain = np.delete(domain, range(200)) # delete filter response in first 200 points
             dr.append(np.mean(domain))
             if outlier: # If data needs filtering
                 Idx = wrapped_indices(maxIdx, f, subDomainRange, N)
@@ -2244,26 +2326,26 @@ def get_data_for_day(i,t0,station):
         datas.append(np.array(df)); columns.append(name+'F')
 
     # compute dsar (w/ EQ filter)
-    dr = []
-    df = []
-    for k, outlier, maxIdx in zip(range(m), outliers, maxIdxs):
-        domain_mf = _dataIs[1][k*N:(k+1)*N]
-        domain_hf = _dataIs[2][k*N:(k+1)*N]
-        dr.append(np.mean(domain_mf)/np.mean(domain_hf))
-        if outlier: # If data needs filtering
-            Idx = wrapped_indices(maxIdx, f, subDomainRange, N)
-            domain_mf = np.delete(domain_mf, Idx) 
-            domain_hf = np.delete(domain_hf, Idx) 
-        df.append(np.mean(domain_mf)/np.mean(domain_hf))
-    datas.append(np.array(dr)); columns.append('dsar')
-    datas.append(np.array(df)); columns.append('dsarF')
+    for j,rname in enumerate(RATIO_NAMES):
+        dr = []
+        df = []
+        for k, outlier, maxIdx in zip(range(m), outliers, maxIdxs):
+            domain_mf = _dataIs[j][k*N:(k+1)*N]
+            domain_hf = _dataIs[j+1][k*N:(k+1)*N]
+            dr.append(np.mean(domain_mf)/np.mean(domain_hf))
+            if outlier: # If data needs filtering
+                Idx = wrapped_indices(maxIdx, f, subDomainRange, N)
+                domain_mf = np.delete(domain_mf, Idx) 
+                domain_hf = np.delete(domain_hf, Idx) 
+            df.append(np.mean(domain_mf)/np.mean(domain_hf))
+        datas.append(np.array(dr)); columns.append(rname)
+        datas.append(np.array(df)); columns.append(rname+'F')
 
     # write out temporary file
     datas = np.array(datas)
     time = [(ti+j*600).datetime for j in range(datas.shape[1])]
     df = pd.DataFrame(zip(*datas), columns=columns, index=pd.Series(time))
     save_dataframe(df, '_tmp/_tmp_fl_{:05d}.csv'.format(i), index=True, index_label='time')
-
 
 def wrapped_indices(maxIdx, f, subDomainRange, N):
     startIdx = int(maxIdx-np.floor(f*subDomainRange)) # Compute the index of the domain where the subdomain centered on the peak begins
@@ -2282,7 +2364,6 @@ def wrapped_indices(maxIdx, f, subDomainRange, N):
 
 def outlierDetection(data, outlier_degree=0.5):
     """ Determines whether a given data interval requires earthquake filtering
-
     Parameters:
     -----------
     data : list
@@ -2379,24 +2460,23 @@ def predict_one_model(fM, model_path, pref, flp):
 
 def datetimeify(t):
     """ Return datetime object corresponding to input string.
-
         Parameters:
         -----------
         t : str, datetime.datetime
             Date string to convert to datetime object.
-
         Returns:
         --------
         datetime : datetime.datetime
             Datetime object corresponding to input string.
-
         Notes:
         ------
         This function tries several datetime string formats, and raises a ValueError if none work.
     """
     if type(t) in [datetime, Timestamp]:
         return t
-    fmts = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y %m %d %H %M %S',]
+    if type(t) is UTCDateTime:
+        return t._get_datetime()
+    fmts = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y %m %d %H %M %S','%Y%m%d:%H%M',]
     for fmt in fmts:
         try:
             return datetime.strptime(t, fmt)
@@ -2411,5 +2491,3 @@ def to_nztimezone(t):
     utctz = tz.gettz('UTC')
     nztz = tz.gettz('Pacific/Auckland')
     return [ti.replace(tzinfo=utctz).astimezone(nztz) for ti in pd.to_datetime(t)]
-
-
