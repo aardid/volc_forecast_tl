@@ -849,6 +849,7 @@ def locate_missed_events_seismic():
         filter_by_mag = True
         filter_by_mech = True
         filter_by_peak = True
+        filter_by_exp_tremor = False
         #
         if sta == 'POS':
             pass
@@ -1009,7 +1010,7 @@ def locate_missed_events_seismic():
                                 _idx = np.where(_vals == np.amax(_vals))[0][0]
                                 idx_erup = _times[_idx]
                             #
-                            _comp = 500
+                            _comp = 100
                             if sta == 'COP':
                                 mu = np.mean(rsam) 
                                 sigma = np.std(rsam) 
@@ -1019,6 +1020,11 @@ def locate_missed_events_seismic():
                                 mu = np.mean(rsam) 
                                 sigma = np.std(rsam) 
                                 _comp = mu + 2*sigma #0.1
+                            if sta == 'FWVZ':
+                                _comp = 60
+                                mu = np.mean(rsam) 
+                                sigma = np.std(rsam) 
+                                _comp = mu + 3*sigma #0.1
 
                             if _rsam_mx > _comp:#or _mf_mx_f > _hf_mx_f:
                                 _a.append(idx_erup)
@@ -1026,6 +1032,69 @@ def locate_missed_events_seismic():
                                 _c.append(max(_dsar_med))
                         except:
                             pass
+                    d = {'cc':_b, 'max':_c}
+                pd_cc_dsar_median = pd.DataFrame(data=d, index=_a)  
+            if filter_by_exp_tremor: # in raw seismic data
+                #
+                dt1 = 'rsamF'
+                #dt2 = 'zsc2_hfF'
+                day = timedelta(days=1)
+                fm = ForecastModel(window=2., overlap=1., station=sta,
+                    look_forward=2., data_streams=[dt1], 
+                    data_dir=r'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\volc_forecast_tl\\data\\'
+                    )
+                    # rolling median and signature length window
+                #N, M = [2,30]
+                # time
+                j = fm.data.df.index
+                # 
+                df = fm.data.df[:]#(j>(te-(M+N)*day))&(j<te)]
+                rsam = df[dt1]#.rolling(N*24*6).median()[N*24*6:]
+
+                ##
+                # loop over dates
+                _a=[]
+                _b=[]
+                _c=[]
+                tau_l=[]
+                count = 0
+                for index, row in pd_cc_dsar_median.iterrows():
+                    idx_erup = index
+                    #print(count)
+                    count += 1
+                    #
+                    try:
+                        t0 = index + 0.1*day
+                        t1 = index + 1.1*day
+                        #
+                        _vals = rsam[t0:t1].values
+                        _times = rsam[t0:t1].index
+                        #
+                        y = np.log10(_vals)
+                        x = np.arange(y.shape[0])/6
+                        z = np.polyfit(x, y, 1)
+                        p = np.poly1d(z)
+                        #
+                        tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                        tau_l.append([index,tau])
+                        #
+                        _comp = 500
+                        # if sta == 'COP':
+                        #     mu = np.mean(rsam) 
+                        #     sigma = np.std(rsam) 
+                        #     _comp = mu + 2*sigma #0.1
+                        # if sta == 'POS':
+                        #     _comp = 60
+                        #     mu = np.mean(rsam) 
+                        #     sigma = np.std(rsam) 
+                        #     _comp = mu + 2*sigma #0.1
+
+                        if True:#tau > 1:#or _mf_mx_f > _hf_mx_f:
+                            _a.append(idx_erup)
+                            _b.append(row['cc'])
+                            _c.append(max(_dsar_med))
+                    except:
+                        pass
                     d = {'cc':_b, 'max':_c}
                 pd_cc_dsar_median = pd.DataFrame(data=d, index=_a)  
         # sum of both cc
@@ -1046,7 +1115,7 @@ def locate_missed_events_seismic():
                 d = {'cc':_cc_l, 'max':_max_l}
                 pd_cc = pd.DataFrame(data=d, index=_idx_l)
         #
-        pd_cc = pd_cc.sort_values('cc', ascending=False)
+        #pd_cc = pd_cc.sort_values('cc', ascending=False)
         #pd_cc.to_csv('test.csv', sep=',')
         #filtering close values 
         l_dates = []
@@ -1082,11 +1151,16 @@ def locate_missed_events_seismic():
             for i, date in enumerate(l_dates[0:max_dates-1]):
                 if l_cc[i] >= cc_threshold:
                     f.write(str(date)+','+str(round(l_max[i],2))+','+str(round(l_cc[i],2))+'\n')
+        if filter_by_exp_tremor:
+            with open(path+sta+'_dates_max_CC_missed_events_from_dsar_median_rv_tau.txt', 'w') as f:
+                for i, date in enumerate(l_dates[0:max_dates-1]):
+                    if l_cc[i] >= cc_threshold:
+                        f.write(str(date)+','+str(round(l_max[i],2))+','+str(round(l_cc[i],2))+','+str(round(tau_l[i][1],2))+'\n')
 
 def plot_located_events_compress(): 
     '''
     '''
-    sta = 'COP'
+    sta = 'FWVZ'
     # import list
     path_ap = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\volc_forecast_tl\\features\\lake_data\\corr_dsar_ratevar\\'
     path = path_ap
@@ -1183,7 +1257,7 @@ def plot_located_events_compress():
                 _val = archtype.values
                 _val_max = max(_val)
                 #
-                ft = 'nDSAR median'
+                ft = 'DSAR median'
                 ax2.plot(_times, _val, '-', color='b', alpha = alpha[0], linewidth=thick_line[0], label=' '+ ft,zorder=1)
                 ax.plot([], [], '-', color='b', alpha = alpha[0], linewidth=thick_line[0], label=' '+ ft,zorder=1)
                 #ax.plot([], [], '-', color='w', alpha = 0.1, linewidth=thick_line[0], label=str(te.year)+' '+str(te.month)+' '+str(te.day),zorder=1)
@@ -4460,7 +4534,7 @@ def figure_1():
     thick_line = [2., 1., 1.]
     N, M = [2,15]
     # plot 1: WIZ (precursor, reference)
-    if False:
+    if True:
         ## DSAR median 
         day = timedelta(days=1)
         sta_arch = 'WIZ'
@@ -4484,7 +4558,7 @@ def figure_1():
         _val = archtype.values
         _val_max = max(_val)
         #
-        ft = 'nDSAR median'
+        ft = 'DSAR median'
         ax1.plot(_times, _val, '-', color=col[0], alpha = alpha[0],linewidth=thick_line[0], label=' '+ ft,zorder=1)
         
         ## rsam raw background
@@ -4532,7 +4606,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nHF median'
+        ft = 'HF median'
         ax1b.plot(_times, _val, '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1])#, label=' '+ ft)
         ax1.plot([], [], '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1], label=' '+ ft)
         ##
@@ -4555,7 +4629,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nMF median'
+        ft = 'MF median'
         ax1b.plot(_times, _val, '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2])#, label=' '+ ft)
         ax1.plot([], [], '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2], label=' '+ ft)
 
@@ -4577,7 +4651,7 @@ def figure_1():
         ax1.grid(color='gray', linestyle='-', linewidth=.3, alpha = 0.5)
 
     # plot 2: FWVZ 2006
-    if False:
+    if True:
         ## DSAR median 
         day = timedelta(days=1)
         sta_arch = 'FWVZ'
@@ -4603,7 +4677,7 @@ def figure_1():
         _val = archtype.values
         _val_max = max(_val)
         #
-        ft = 'nDSAR median'
+        ft = 'DSAR median'
         ax2.plot(_times, _val, '-', color=col[0], alpha = alpha[0],linewidth=thick_line[0], label=' '+ ft,zorder=1)
         
         ## rsam raw background
@@ -4649,7 +4723,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nHF median'
+        ft = 'HF median'
         ax2b.plot(_times, _val, '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1])#, label=' '+ ft)
         ax2.plot([], [], '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1], label=' '+ ft)
         ##
@@ -4671,7 +4745,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nMF median'
+        ft = 'MF median'
         ax2b.plot(_times, _val, '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2])#, label=' '+ ft)
         ax2.plot([], [], '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2], label=' '+ ft)
 
@@ -4696,7 +4770,7 @@ def figure_1():
         ax2.grid(color='gray', linestyle='-', linewidth=.3, alpha = 0.5)
 
     # plot 2: FWVZ 2007
-    if False:
+    if True:
         ## DSAR median 
         day = timedelta(days=1)
         sta_arch = 'FWVZ'
@@ -4723,7 +4797,7 @@ def figure_1():
         _val = archtype.values
         _val_max = max(_val)
         #
-        ft = 'nDSAR median'
+        ft = 'DSAR median'
         ax3.plot(_times, _val, '-', color=col[0], alpha = alpha[0],linewidth=thick_line[0], label=' '+ ft,zorder=1)
         
         ## rsam raw background
@@ -4768,7 +4842,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nHF median'
+        ft = 'HF median'
         ax3b.plot(_times, _val, '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1])#, label=' '+ ft)
         ax3.plot([], [], '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1], label=' '+ ft)
         ##
@@ -4790,11 +4864,11 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nMF median'
+        ft = 'MF median'
         ax3b.plot(_times, _val, '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2])#, label=' '+ ft)
         ax3.plot([], [], '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2], label=' '+ ft)
 
-        ax3b.set_ylim([0,1.5])
+        #ax3b.set_ylim([0,1.5])
 
         # plot event 
         ax3.axvline(te+0.09*day, color='k',linestyle='--', linewidth=3, zorder = 4)
@@ -4818,7 +4892,7 @@ def figure_1():
         ax3.grid(color='gray', linestyle='-', linewidth=.3, alpha = 0.5)
 
     # plot 3: Kawa 2007
-    if False:
+    if True:
         ## DSAR median 
         day = timedelta(days=1)
         sta_arch = 'POS'
@@ -4846,7 +4920,7 @@ def figure_1():
         _val = archtype.values
         _val_max = max(_val)
         #
-        ft = 'nDSAR median'
+        ft = 'DSAR median'
         ax4.plot(_times, _val, '-', color=col[0], alpha = alpha[0],linewidth=thick_line[0], label=' '+ ft,zorder=1)
         
         ## rsam raw background
@@ -4891,7 +4965,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nHF median'
+        ft = 'HF median'
         ax4b.plot(_times, _val, '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1])#, label=' '+ ft)
         ax4.plot([], [], '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1], label=' '+ ft)
         ##
@@ -4913,7 +4987,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nMF median'
+        ft = 'MF median'
         ax4b.plot(_times, _val, '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2])#, label=' '+ ft)
         ax4.plot([], [], '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2], label=' '+ ft)
 
@@ -4974,7 +5048,7 @@ def figure_1():
         _val = archtype.values
         _val_max = max(_val)
         #
-        ft = 'nDSAR median'
+        ft = 'DSAR median'
         ax5.plot(_times, _val, '-', color=col[0], alpha = alpha[0],linewidth=thick_line[0], label=' '+ ft,zorder=1)
         
         ## rsam raw background
@@ -5018,7 +5092,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nHF median'
+        ft = 'HF median'
         ax5b.plot(_times, _val, '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1])#, label=' '+ ft)
         ax5.plot([], [], '-', color=col[1], alpha = alpha[1],linewidth=thick_line[1], label=' '+ ft)
         ##
@@ -5040,7 +5114,7 @@ def figure_1():
         _times = archtype.index
         _val = archtype.values
         #
-        ft = 'nMF median'
+        ft = 'MF median'
         ax5b.plot(_times, _val, '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2])#, label=' '+ ft)
         ax5.plot([], [], '-', color=col[2], alpha = alpha[2],linewidth=thick_line[2], label=' '+ ft)
 
@@ -5068,8 +5142,8 @@ def figure_1():
         #
         ax5.grid(color='gray', linestyle='-', linewidth=.3, alpha = 0.5)
 
-    ax1.set_title('Whakaari 2019 empirical model: sealing, pressurization and eruption')
-    ax2.set_title('Ruapehu 2006 eruption (small)')
+    ax1.set_title('Whakaari 2019 eruption: sealing, pressurization and eruption')
+    ax2.set_title('Ruapehu 2006 eruption')
     ax3.set_title('Ruapehu 2007 eruption')
     ax4.set_title('Kawa Ijen 2013 eruption')
     ax5.set_title('Copahue 2020 small eruption')
@@ -6780,13 +6854,13 @@ def figure_4():
         server2 = True # server at uni 
         #plot_erup = False
     #
-    look_back = 21
-    look_front = 5
+    look_back = 28
+    look_front = 2
     #
-    #erup_time = datetimeify('2009 07 13 06 30 00')
+    erup_time = datetimeify('2009 07 13 06 30 00')
     #erup_time = datetimeify('2010 09 03 00 00 00')
     #erup_time = datetimeify('2021 03 04 12 00 00')
-    erup_time = datetimeify('2016 11 13 12 00 00')
+    #erup_time = datetimeify('2016 11 13 12 00 00')
     #
     #erup_time = datetimeify('2021 09 09 00 00 00')
     #
@@ -6810,16 +6884,16 @@ def figure_4():
         # plot event 
         #te = datetimeify('2009-07-07') 
         te = datetimeify('2009-07-13 06:30:00')
-        ax.axvline(te+0.12*day, color='k',linestyle='--', linewidth=3, zorder = 4)
-        ax.plot([], color='k', linestyle='--', linewidth=3, label = 'located event')
+        ax.axvline(te+0.*day, color='r',linestyle='-', linewidth=7, alpha=.3, zorder = 0)
+        ax.plot([], color='r', linestyle='-', linewidth=7, alpha=.3, label = 'fluid release event')
         # plot eruption 
-        te = datetimeify('2009 07 13 06 30 00') 
+        #te = datetimeify('2009 07 13 06 30 00') 
         #ax.axvline(te+0.22*day, color='r',linestyle='-', linewidth=3, zorder = 4)
         #ax.plot([], color='r', linestyle='-', linewidth=3, label = 'eruption')  
   
     #####################################################
     # subplot cero
-    if False:
+    if True:
         #
         sta = 'FWVZ'#'POS'#'FWVZ'#'COP'
         ## import events
@@ -6837,23 +6911,23 @@ def figure_4():
         date_events = []
         cc_events = []
         max_events = []
-        with open(path_dates_filt_on,'r') as fp:
-            for ln in fp.readlines():
-                _d, _cc, _mx =ln.rstrip().split(',')
-                date_events.append(datetimeify(_d))
-                cc_events.append(_cc)
-                max_events.append(_mx)
-            #date_events = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
-        #
-        date_events_filt_off = []
-        cc_events_filt_off = []
-        max_events_filt_off = []
-        with open(path_dates_filt_off,'r') as fp:
-            for ln in fp.readlines():
-                _d, _cc, _mx =ln.rstrip().split(',')
-                date_events_filt_off.append(datetimeify(_d))
-                cc_events_filt_off.append(_cc)
-                max_events_filt_off.append(_mx)
+        # with open(path_dates_filt_on,'r') as fp:
+        #     for ln in fp.readlines():
+        #         _d, _cc, _mx =ln.rstrip().split(',')
+        #         date_events.append(datetimeify(_d))
+        #         cc_events.append(_cc)
+        #         max_events.append(_mx)
+        #     #date_events = [datetimeify(ln.rstrip()) for ln in fp.readlines()]
+        # #
+        # date_events_filt_off = []
+        # cc_events_filt_off = []
+        # max_events_filt_off = []
+        # with open(path_dates_filt_off,'r') as fp:
+        #     for ln in fp.readlines():
+        #         _d, _cc, _mx =ln.rstrip().split(',')
+        #         date_events_filt_off.append(datetimeify(_d))
+        #         cc_events_filt_off.append(_cc)
+        #         max_events_filt_off.append(_mx)
         #
 
         col = ['r','g','b']
@@ -6904,21 +6978,21 @@ def figure_4():
                 #ax2b.set_ylabel('temperature C')   
                 #ax.legend(loc = 2)   
                 ## plot event
-                for d_events in date_events_filt_off:
-                    if d_events > ti_e1 and d_events <= tf_e1:
-                        ax0.axvline(x=d_events, color='gray', ls='--', lw = 3)#, lw = 14)
-                        #ax.axvline(x=cycle_date_mid[i], color='gray', ls='--')#, lw = 14)
-                for d_events in date_events:
-                    if d_events > ti_e1 and d_events <= tf_e1:
-                        ax0.axvline(x=d_events, color='k', ls='--', lw = 3)#, lw = 14)
-                        #ax0.axvline(x=cycle_date_mid[i], color='blue', ls='-')#, lw = 14)
+                # for d_events in date_events_filt_off:
+                #     if d_events > ti_e1 and d_events <= tf_e1:
+                #         ax0.axvline(x=d_events, color='gray', ls='--', lw = 3)#, lw = 14)
+                #         #ax.axvline(x=cycle_date_mid[i], color='gray', ls='--')#, lw = 14)
+                # for d_events in date_events:
+                #     if d_events > ti_e1 and d_events <= tf_e1:
+                #         ax0.axvline(x=d_events, color='k', ls='--', lw = 3)#, lw = 14)
+                #         #ax0.axvline(x=cycle_date_mid[i], color='blue', ls='-')#, lw = 14)
                 #
                 te = datetimeify('2009 07 13 06 30 00') 
-                #ax0.axvline(te+1.1*day, color='r',linestyle='-', linewidth=3, zorder = 4)
-                #ax0.plot([], color='r', linestyle='-', linewidth=3, label = 'eruption') 
+                ax0.axvline(te+0*day, color='r',linestyle='-', linewidth=3, alpha = .5, zorder = 4)
+                ax0.plot([], color='r', linestyle='-', linewidth=3, label = 'fluid release event') 
                 #
-                ax0.plot([],[], color='gray', ls='--', lw = 3, label = 'non-expl events')
-                ax0.plot([],[], color='black', ls='--', lw = 3, label = 'expl events')
+                #ax0.plot([],[], color='gray', ls='--', lw = 3, label = 'non-expl events')
+                #ax0.plot([],[], color='black', ls='--', lw = 3, label = 'expl events')
                 #ax0.plot([],[], color='blue', ls='-', label = 'mid heat/cool cycle')
                 ax0.legend(loc = 1)   
                 ax0.grid()
@@ -7002,7 +7076,7 @@ def figure_4():
                 v_plot = test.values
             #
             if ft == 'zsc2_dsarF__median':
-                ft = 'nDSAR median'
+                ft = 'DSAR median'
             #
             ax1b.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
             #
@@ -7021,10 +7095,10 @@ def figure_4():
                 #ax1.set_ylim([0,1])
                 #ax1.set_yticks([])
             #
-            if plot_erup: # plot vertical lines
+            if False:#plot_erup: # plot vertical lines
                 te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
-                ax1b.axvline(te, color='k',linestyle='--', linewidth=2, zorder = 4)
-                ax1b.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+                ax1b.axvline(te, color='r',linestyle='-', linewidth=5, alpha=0.5,zorder = 4)
+                ax1b.plot([], color='r', linestyle='-', linewidth=5, alpha=0.5, label = 'fluid release event')
             #
             #ax1.legend(loc = 2)
             #
@@ -7033,7 +7107,7 @@ def figure_4():
             
             #ax1b.set_yticks([])
             ax1b.grid()
-            ax1b.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+            ax1b.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
             #ax1.set_yscale('log') #ax.set_yscale('log')
             #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
             #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -7176,24 +7250,24 @@ def figure_4():
                             ax1.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
                         else:
                             #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                            ax1.plot(data.index[inds], v_plot, '-', color=col, linewidth=2., alpha = .7, zorder = 0)
-                            ax1b.plot([], [], '-', color=col, label=label[i], linewidth=2., alpha = .7, zorder = 0)
+                            ax1.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = 1., zorder = 1)
+                            ax1b.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = 1., zorder = 1)
                     else:
-                        ax1.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=2., alpha = .7, zorder = 0)
+                        ax1.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=2., alpha = .9, zorder = 1)
                     i+=1
                 for te in td.tes:
                     if [te>=datetimeify(_range[0]) and te<=datetimeify(_range[1])]:
                         pass
                         #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
                 #
-                ax1.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
+                #ax1.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
                 #ax4.set_xlim(_range)
                 #ax1b.legend(loc = 2)
                 #ax1b.grid()
                 if log:
                     ax1.set_ylabel(' ')
                 else:
-                    ax1.set_ylabel('RSAM \u03BC m/s')
+                    ax1.set_ylabel('RSAM')# \u03BC m/s')
                 #ax4.set_xlabel('Time [month-day hour]')
                 #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
                 #
@@ -7306,9 +7380,9 @@ def figure_4():
                     ax2b.set_ylabel('Lake level cm') 
                     ax2.plot([], [], '-', color='royalblue', label='lake level')
 
-                    if plot_erup: # plot vertical lines
+                    if False:#plot_erup: # plot vertical lines
                         te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
-                        ax2.axvline(te, color='k',linestyle='--', linewidth=2, zorder = 4)
+                        ax2.axvline(te, color='r',linestyle='-', linewidth=3, alpha = 0.5, zorder = 4)
                         #ax2.plot([], color='k', linestyle='--', linewidth=2, label = 'eruption')
                 #except:
                 #    pass
@@ -7561,9 +7635,9 @@ def figure_4():
     #ax3.set_xlim([t0+2*day,t1])
     #ax4.set_xlim([t0+2*day,t1])
     #
-    ax0.set_title('(a) Ruapehu 2009 temperature cycle and hydrothermal event on 07/13')
-    ax1.set_title('(b) DSAR median and RSAM before hydrothermal event on 07/13')
-    ax2.set_title('(c) Lake temperature and level before hydrothermal event on 07/13')
+    ax0.set_title('(a) Ruapehu 2009 temperature cycle and fluid release event on 07/13')
+    ax1.set_title('(b) DSAR median and RSAM before fluid release event on 07/13')
+    ax2.set_title('(c) Lake temperature and level before fluid release event on 07/13')
     #ax4.set_title('Seismic datastreams before hydrothermal event on 07/13')
     #
     plt.tight_layout()
@@ -7578,11 +7652,11 @@ def figure_sup_ruapehu_events(): # events in seismic and lake levels
     if sta == 'FWVZ':
         ffm = False
         server = False # files imported from server to local pc 
-        server2 = True # server at uni 
-        #plot_erup = False
+        server2 = False # server at uni 
+        plot_erup = True
     #
-    look_back = 14
-    look_front = 4
+    look_back = 10
+    look_front = 5
     #
     #erup_time = datetimeify('2009 07 13 06 30 00')
     #erup_time = datetimeify('2010 09 03 00 00 00')
@@ -7639,7 +7713,7 @@ def figure_sup_ruapehu_events(): # events in seismic and lake levels
             thick_line = [2., 6., 1.]
             axb = ax.twinx() 
             for i, ft in enumerate(fts_yleft):
-                if True: # load feature (else: cal feature. median or rv)
+                if False: # load feature (else: cal feature. median or rv)
                     if 'zsc2_dsarF' in ft:
                         ds = ['zsc2_dsarF'] 
                     if server:
@@ -7703,7 +7777,7 @@ def figure_sup_ruapehu_events(): # events in seismic and lake levels
                     v_plot = test.values
                 #
                 if ft == 'zsc2_dsarF__median':
-                    ft = 'nDSAR median'
+                    ft = 'DSAR median'
                 #
                 axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
                 #
@@ -8137,7 +8211,7 @@ def figure_sup_ruapehu_events(): # events in seismic and lake levels
     #ax.set_xlim([t0+2*day,t1])
     #ax.set_xlim([t0+2*day,t1])
     #ax1.set_ylim([10**.4,10**2.1])
-    #ax3.set_ylim([10**.5,10**2])
+    ax3.set_ylim([10**0,10**3.5])
     #ax4.set_ylim([1,100])
     #ax7.set_ylim([1,100])
     #ax2b.set_ylim([0.1,0.5])
@@ -8228,7 +8302,7 @@ def figure_sup_kawahijen_events(): # events in seismic and lake levels
             # features
             fts_yleft = ['zsc2_dsarF__median']
             fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
-            data_yrigth = ['rsam']
+            data_yrigth = ['rsamF']
             
             #
             col = ['b','b','r']
@@ -8331,7 +8405,7 @@ def figure_sup_kawahijen_events(): # events in seismic and lake levels
                 
                 #ax1b.set_yticks([])
                 axb.grid()
-                axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                 #ax1.set_yscale('log') #ax.set_yscale('log')
                 #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                 #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -8412,7 +8486,7 @@ def figure_sup_kawahijen_events(): # events in seismic and lake levels
                     if ft == 'zsc2_hfF__median':
                         ft = 'nHF median'
                     #
-                    ax.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i],label=' '+ ft, zorder = 4)
+                    ax.plot(ft_e1_t, v_plot/1e9, '-', color=col[i], alpha = alpha[i],label=' '+ ft, zorder = 4)
                     #
                     ax.legend(loc = 3)
                     #
@@ -8471,10 +8545,10 @@ def figure_sup_kawahijen_events(): # events in seismic and lake levels
                             v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
                         if label:
                             if col_def:
-                                ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
+                                ax.plot(data.index[inds], v_plot/1e9, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
                             else:
                                 #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                                ax.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
+                                ax.plot(data.index[inds], v_plot/1e9, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
                                 axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
                         else:
                             ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
@@ -8662,9 +8736,9 @@ def figure_sup_kawahijen_events(): # events in seismic and lake levels
     #                 datetimeify('2010 09 03 12 00 00'),
     #                 datetimeify('2016 11 13 12 00 00'),
     #                 datetimeify('2021 03 04 12 00 00')]
-    ax1.set_title('(a) Kawah Ijen 2013/03/31 seismic RSAM and DSAR median')
-    ax3.set_title('(c) Kawah Ijen 2012/11/23 seismic RSAM and DSAR median')
-    ax5.set_title('(e) Kawah Ijen 2013/01/24 seismic RSAM and DSAR median')
+    #ax1.set_title('(a) Kawah Ijen 2013/03/31 seismic RSAM and DSAR median')
+    #ax3.set_title('(c) Kawah Ijen 2012/11/23 seismic RSAM and DSAR median')
+    #ax5.set_title('(e) Kawah Ijen 2013/01/24 seismic RSAM and DSAR median')
     #ax7.set_title(' Ruapehu 2021/03/04 seismic RSAM and DSAR median')
     #
     ax2.set_title('(b) Kawah Ijen 2013/03/31 lake levels data')
@@ -8687,17 +8761,17 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
     if sta == 'COP':
         ffm = False
         server = False # files imported from server to local pc 
-        server2 = True # server at uni 
+        server2 = False # server at uni 
         #plot_erup = False
     #
     look_back = 14
-    look_front = 0
+    look_front = 4
     #
     #erup_time = datetimeify('2009 07 13 06 30 00')
     #erup_time = datetimeify('2010 09 03 00 00 00')
     #erup_time = datetimeify('2021 03 04 12 00 00')
     erup_times = [datetimeify('2020 08 23 12 00 00'), 
-                    datetimeify('2020 07 16 12 00 00'),
+                    datetimeify('2020 07 15 18 00 00'), #'2020 07 16 00 00 00'
                     datetimeify('2020 06 16 12 00 00'),
                     datetimeify('2020 08 08 12 00 00')]
     #
@@ -8740,7 +8814,7 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
             # features
             fts_yleft = ['zsc2_dsarF__median']
             fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
-            data_yrigth = ['rsam']
+            data_yrigth = ['rsamF']
             
             #
             col = ['b','b','r']
@@ -8812,7 +8886,7 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
                     v_plot = test.values
                 #
                 if ft == 'zsc2_dsarF__median':
-                    ft = 'nDSAR median'
+                    ft = 'DSAR median'
                 #
                 axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
                 #
@@ -8843,7 +8917,7 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
                 
                 #ax1b.set_yticks([])
                 axb.grid()
-                axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                 #ax1.set_yscale('log') #ax.set_yscale('log')
                 #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                 #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -8986,10 +9060,10 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
                                 ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
                             else:
                                 #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                                ax.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
+                                ax.plot(data.index[inds], v_plot*1e9, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
                                 axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
                         else:
-                            ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
+                            ax.plot(data.index[inds], v_plot*1e9, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
                         i+=1
                     for te in td.tes:
                         if [te>=datetimeify(_range[0]) and te<=datetimeify(_range[1])]:
@@ -9009,7 +9083,7 @@ def figure_sup_copahue_events(): # events in seismic and lake levels
                     #
                     #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                     #ax4.set_ylim([1e9,1e13])
-                    ax.set_yscale('log')
+                    #ax.set_yscale('log')
             axb.legend(loc = 2)      
             axb.grid(False)
             ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
@@ -9763,12 +9837,12 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
     sta = 'FWVZ' 
     if sta == 'FWVZ':
         ffm = False
-        server = False # files imported from server to local pc 
-        server2 = True # server at uni 
+        server = True # files imported from server to local pc 
+        server2 = False # server at uni 
         #plot_erup = False
     #
-    look_back = 14
-    look_front = 7
+    look_back = 2#14
+    look_front = 4#1.5
     #
     day = timedelta(days=1)
     #
@@ -9788,7 +9862,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
     # First column (first and second row)
     if True:
         erup_times = [datetimeify('2006 10 04 09 30 00'), 
-                        datetimeify('2009 07 13 06 30 00'), 
+                        datetimeify('2007 09 25 08 20 00'),#datetimeify('2009 07 13 06 30 00'), 
                         datetimeify('2010 09 03 16 00 00')]
         for j,ax in enumerate([ax1, ax3, ax5]):
             #
@@ -9800,11 +9874,12 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                 fts_yleft = ['zsc2_dsarF__median']
                 fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
                 data_yrigth = ['rsam']
+                fts_yleft = []#'zsc2_dsarF__median']
                 
                 #
                 col = ['b','b','r']
                 alpha = [1., 1., .5]
-                thick_line = [2., 6., 1.]
+                thick_line = [1., 1., 1.]
                 axb = ax.twinx() 
                 for i, ft in enumerate(fts_yleft):
                     if True: # load feature (else: cal feature. median or rv)
@@ -9871,7 +9946,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         v_plot = test.values
                     #
                     if ft == 'zsc2_dsarF__median':
-                        ft = 'nDSAR median'
+                        ft = 'DSAR median'
                     #
                     axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
                     #
@@ -9906,11 +9981,12 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     
                     #ax1b.set_yticks([])
                     axb.grid()
-                    axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                    axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                     #ax1.set_yscale('log') #ax.set_yscale('log')
                     #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                     #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                 #     #
+
                 # except:
                 #     pass
                 if fts_yrigth:
@@ -10000,6 +10076,15 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                         #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                         #
+                        #
+                        if plot_erup: # plot vertical lines
+                            te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
+                            if True:#j == 0:
+                                ax.axvline(te, color='red', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                axb.plot([], color='red', alpha = .25, linestyle='-', linewidth=12, label = 'eruption')
+                            else:
+                                ax.axvline(te, color='gray', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                axb.plot([], color='gray', alpha = .25, linestyle='-', linewidth=12, label = 'fluid release event')
                     #except:
                     #    pass
 
@@ -10060,13 +10145,22 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                                 #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
                         #
                         ax.plot([], color='k', linestyle='--', linewidth=1, label = 'eruption')
+                        #
+                        if plot_erup: # plot vertical lines
+                            te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
+                            if True:#j == 0:
+                                ax.axvline(te, color='red', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                axb.plot([], color='red', alpha = .25, linestyle='-', linewidth=12, label = 'eruption')
+                            else:
+                                ax.axvline(te, color='gray', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                axb.plot([], color='gray', alpha = .25, linestyle='-', linewidth=12, label = 'fluid release event')
                         #ax4.set_xlim(_range)
                         #ax1b.legend(loc = 2)
                         #ax1b.grid()
                         if log:
                             ax.set_ylabel(' ')
                         else:
-                            ax.set_ylabel('RSAM \u03BC m/s')
+                            ax.set_ylabel('RSAM')
                         #ax4.set_xlabel('Time [month-day hour]')
                         #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
                         #
@@ -10078,7 +10172,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                 ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
                 #
 
-        _d = 5 
+        _d = 1 
         t1 = erup_times[0] + look_front*day#hour
         ax1.set_xticks([t1 - _d*day*i for i in range(int((look_back+look_front)/_d)+1)])
         t3 = erup_times[1] + look_front*day#hour
@@ -10088,7 +10182,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
     
     #####################################################
     # Second column (first and second row)
-    if True:
+    if False:
         erup_times = [datetimeify('2007 09 25 08 20 00'), 
                         datetimeify('2016 11 13 12 00 00'),
                         datetimeify('2021 03 04 12 00 00')]
@@ -10172,7 +10266,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         v_plot = test.values
                     #
                     if ft == 'zsc2_dsarF__median':
-                        ft = 'nDSAR median'
+                        ft = 'DSAR median'
                     #
                     axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
                     #
@@ -10207,7 +10301,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     
                     #ax1b.set_yticks([])
                     axb.grid()
-                    axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                    axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                     #ax1.set_yscale('log') #ax.set_yscale('log')
                     #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                     #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -10218,7 +10312,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     #ax1b = ax1.twinx() 
                     col = ['r','g']
                     alpha = [1., .5]
-                    thick_line = [2.,1.]
+                    thick_line = [1.,1.]
                     #try: 
                     for i, ft in enumerate(fts_yrigth):
                         if 'zsc2_dsarF' in ft:
@@ -10228,7 +10322,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         if 'zsc2_hfF' in ft:
                             ds = 'zsc2_hfF' 
                         # 
-                        if False: # look feature in the prev cacl features (else: calculate feat from data; only for median and rv)
+                        if True: # look feature in the prev cacl features (else: calculate feat from data; only for median and rv)
                             if server:
                                 path_feat_serv = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\features_bkp\\features_server\\'
                                 fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
@@ -10251,7 +10345,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                             ##  
                             ft = ft.replace("-",'"')
                             
-                            ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
+                            ft_e1 = fm_e1.get_features(ti=t0, tf=t1-.5*DAY, n_jobs=1, compute_only_features=[ft])
                             # adding multiple Axes objects
 
                             # extract values to plot 
@@ -10411,7 +10505,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
         server = False # files imported from server to local pc 
         server2 = True # server at uni 
 
-    if True: # Kawah Ijen eruption 
+    if False: # Kawah Ijen eruption 
         erup_times = [datetimeify('2013 01 24 00 00 00')]
         #
         # subplot one: MF, HF, DSAR medians (DSAR yaxis left; MF, HF yaxis rigth). 1/RSAM (normalized)
@@ -10494,7 +10588,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         v_plot = test.values
                     #
                     if ft == 'zsc2_dsarF__median':
-                        ft = 'nDSAR median'
+                        ft = 'DSAR median'
                     #
                     axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
                     #
@@ -10529,7 +10623,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     
                     #ax1b.set_yticks([])
                     axb.grid()
-                    axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                    axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                     #ax1.set_yscale('log') #ax.set_yscale('log')
                     #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                     #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -10704,7 +10798,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                 t1 = erup_times[0] + look_front*day#hour
                 ax.set_xticks([t1 - _d*day*i for i in range(int((look_back+look_front)/_d)+1)])
     
-    if True: # Copahue eruption 
+    if False: # Copahue eruption 
         #
         sta = 'COP' 
         if sta == 'COP':
@@ -10783,7 +10877,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     _val = archtype.values
                     _val_max = max(_val)
                     #
-                    ft = 'nDSAR median'
+                    ft = 'DSAR median'
                     axb.plot(_times, _val, '-', color='b', alpha = None, linewidth = 2, label=' '+ ft, zorder = 2) # '-', color='b', alpha = alpha[0], linewidth=thick_line[0], label=' '+ ft,zorder=1)
                     ax.plot([], [], '-', color='b', alpha = None, linewidth = 2, label=' '+ ft, zorder = 2)# color='b', alpha = alpha[0], linewidth=thick_line[0], label=' '+ ft,zorder=1)
                     #ax.plot([], [], '-', color='w', alpha = 0.1, linewidth=thick_line[0], label=str(te.year)+' '+str(te.mo
@@ -10804,7 +10898,7 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                 #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                 #ax1b.set_yticks([])
                 axb.grid()
-                axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                axb.set_ylabel('DSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                 ax.set_ylabel('RSAM \u03BC m/s')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                 #ax1.set_yscale('log') #ax.set_yscale('log')
                 #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
@@ -10831,16 +10925,18 @@ def figure_3_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
     #ax3.set_xlim([t0+2*day,t1])
     #ax4.set_xlim([t0+2*day,t1])
     #
-    ax1.set_title('(a) 2006/10/04 Ruapehu eruption: seismic RSAM and DSAR median')
-    ax2.set_title('(b) 2007/09/25 Ruapehu eruption: seismic RSAM and DSAR median')
+    ax1.set_title('(a) 2006/10/04 Ruapehu eruption: RSAM peak and exponential decay')
+    ax2.set_title('(b) 2007/09/25 Ruapehu ERUPTION: seismic RSAM and DSAR median')
+    ax3.set_title('(b) 2007/09/25 Ruapehu eruption: RSAM peak and exponential decay')
+
     #
-    ax3.set_title('(c) 2009/07/13 Ruapehu possible sealing and fluid release event')
+    #ax3.set_title('(c) 2009/07/13 Ruapehu possible sealing and fluid release event')
     ax5.set_title('(e) 2010/09/03 Ruapehu possible sealing and fluid release event')
     ax4.set_title('(d) 2016/11/13 Ruapehu possible sealing and fluid release event')
     ax6.set_title('(f) 2021/03/04 Ruapehu possible sealing and fluid release event')
     #
     ax7.set_title('(g) 2013/01/23 Kawah Ijen possible sealing and fluid release event')
-    ax8.set_title('(e) 2020/07/16 Copahue possible sealing and fluid release event')
+    ax8.set_title('(h) 2020/07/16 Copahue possible sealing and fluid release event')
     #
     plt.tight_layout()
     plt.show()
@@ -11459,8 +11555,8 @@ def figure_4_alt():
     sta = 'FWVZ' 
     if sta == 'FWVZ':
         ffm = False
-        server = False # files imported from server to local pc 
-        server2 = True # server at uni 
+        server = True # files imported from server to local pc 
+        server2 = False # server at uni 
         #plot_erup = False
     #
     look_back = 16
@@ -12552,7 +12648,9 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                                     ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
                                 else:
                                     #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                                    ax.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
+                                    _dd = data.index[inds]
+                                    _dd = np.arange(v_plot.shape[0])/6
+                                    ax.plot(_dd, v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
                                     axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
                             else:
                                 ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
@@ -12566,49 +12664,86 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         #ax4.set_xlim(_range)
                         #ax1b.legend(loc = 2)
                         #ax1b.grid()
-                        
-                        # polyfit
-                        #x = data.index[inds] 
-                        x = mdates.date2num(data.index[inds] )
-                        y = np.log10(v_plot.values)
-                        z = np.polyfit(x, y, 1)
-                        p = np.poly1d(z)
                         #
-                        xx = np.linspace(x.min(), x.max(), 100)
-                        dd = mdates.num2date(xx)
-                        #
-                        l_fit.append(z)
-                        #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
-                        label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
-                        ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
-                            #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
-                        dt = (dd[-1]-dd[0]).seconds/3600 # hours
-                        dy = p(xx[0]) - p(xx[-1])
-                        tau = dt/dy
-                        #
-                        ax.plot(dd, 10**p(xx), '-g', label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
-                        axb.plot([],[], '-g', label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
-                        #
-                        if log:
-                            ax.set_ylabel(' ')
-                        else:
-                            ax.set_ylabel('RSAM \u03BC m/s')
-                        #ax4.set_xlabel('Time [month-day hour]')
-                        #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
-                        #
-                        #ax.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                        #ax.set_xticks([i for i in range(24)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                        #ax4.set_ylim([1e9,1e13])
-                        #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                        if True:
+                            ## polyfit 1
+                            #x = data.index[inds] 
+                            #x = mdates.date2num(data.index[inds])
+                            y = np.log10(v_plot.values)
+                            x = np.arange(y.shape[0])/6
+                            z = np.polyfit(x, y, 1)
+                            p = np.poly1d(z)
+                            #
+                            #xx = np.linspace(x.min(), x.max(), 100)
+                            #dd = mdates.num2date(xx)
+                            #
+                            l_fit.append(z)
+                            #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                            label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                            #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                            #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                            #dy = p(xx[0]) - p(xx[-1])
+                            #tau = dt/dy
+                            tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                            #
+                            #_yy = 10**p(x)#(xx)
+                            #_dd = np.arange(_yy.shape[0])
+                            #
+                            ax.plot(x, 10**p(x), '-g', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                            axb.plot([],[], '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
 
-                        #ax.set_yscale('log')
+                            ## polyfit 2
+                            if j in [0,2]:
+                                t0 = erup_times[j] - look_back*day#30*day
+                                t1 = erup_times[j] + 2/8*day#hour
+                                _range = [t0,t1]
+                                #
+                                inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
+                                v_plot = data[data_stream].loc[inds]
+                                #
+                                #x = mdates.date2num(data.index[inds])
+                                y = np.log10(v_plot.values)
+                                x = np.arange(y.shape[0])/6
+                                z = np.polyfit(x, y, 1)
+                                p = np.poly1d(z)
+                                #
+                                #xx = np.linspace(x.min(), x.max(), 100)
+                                #dd = mdates.num2date(xx)
+                                #
+                                l_fit.append(z)
+                                #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                                label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                                #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                    #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                                #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                                #dy = p(xx[0]) - p(xx[-1])
+                                #tau = dt/dy
+                                tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                                #
+                                #ax.plot(dd, 10**p(xx), '--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                ax.plot(x, 10**p(x),'--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                axb.plot([],[], '--b', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                                ##
+                                if log:
+                                    ax.set_ylabel(' ')
+                                else:
+                                    ax.set_ylabel('RSAM \u03BC m/s')
+                                #ax4.set_xlabel('Time [month-day hour]')
+                                #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
+                                #
+                                #ax.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax.set_xticks([i for i in range(24)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax4.set_ylim([1e9,1e13])
+                                #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax.set_yscale('log')
                 #if j == 0:
                 axb.legend(loc = 1, prop={'size': 10})     
                 axb.grid(False)
                 ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
                 #
                 axb.set_yticklabels([])
-                ax.set_xlabel('Time [month-day hour]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                ax.set_xlabel('Time [hours]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
 
                 #
         # _d = 5 
@@ -12628,6 +12763,7 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
         erup_times = [datetimeify('2007 09 25 09 45 00'), 
                         datetimeify('2016 11 13 12 00 00'),
                         datetimeify('2021 03 04 14 00 00')]
+        #
         for j,ax in enumerate([ax2, ax4, ax6]):
             #
             t0 = erup_times[j] - look_back*day#30*day
@@ -12638,6 +12774,7 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                 fts_yleft = []#['zsc2_dsarF__median']
                 fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
                 data_yrigth = ['rsam']
+                
                 #
                 col = ['b','b','r']
                 alpha = [1., 1., .5]
@@ -12711,7 +12848,7 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         ft = 'nDSAR median'
                     #
                     axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
-                    #
+
                     #
                     if ffm: # ffm 
                         #ax1b = ax1.twinx() 
@@ -12886,7 +13023,9 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                                     ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
                                 else:
                                     #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                                    ax.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
+                                    _dd = data.index[inds]
+                                    _dd = np.arange(v_plot.shape[0])/6
+                                    ax.plot(_dd, v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
                                     axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
                             else:
                                 ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
@@ -12900,43 +13039,86 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         #ax4.set_xlim(_range)
                         #ax1b.legend(loc = 2)
                         #ax1b.grid()
-                        if log:
-                            ax.set_ylabel(' ')
-                        else:
-                            ax.set_ylabel('RSAM \u03BC m/s')
-                        #ax4.set_xlabel('Time [month-day hour]')
-                        #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
                         #
-                        #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                        #ax4.set_ylim([1e9,1e13])
-                        # polyfit
-                        #x = data.index[inds] 
-                        x = mdates.date2num(data.index[inds] )
-                        y = np.log10(v_plot.values)
-                        z = np.polyfit(x, y, 1)
-                        p = np.poly1d(z)
-                        #
-                        xx = np.linspace(x.min(), x.max(), 100)
-                        dd = mdates.num2date(xx)
-                        #
-                        l_fit.append([z])
-                        ax.plot(dd, 10**p(xx), '-g', label = 'linear fit')
-                        #axb.plot([],[], '-g', label = 'linear fit')
-                        #axb.plot([],[], '-g', label = r'linear fit (tau='+str(round(-1./z[0],2))+' hrs)')
-                        dt = (dd[-1]-dd[0]).seconds/3600 # hours
-                        dy = p(xx[0]) - p(xx[-1])
-                        tau = dt/dy
-                        #
-                        #ax.plot(dd, 10**p(xx), '-g', label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
-                        axb.plot([],[], '-g', label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
-                        #
-                        #ax.set_yscale('log')
-                ax.set_xlabel('Time [month-day hour]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
-                axb.legend(loc = 1, prop={'size': 10})    
+                        if True:
+                            ## polyfit 1
+                            #x = data.index[inds] 
+                            #x = mdates.date2num(data.index[inds])
+                            y = np.log10(v_plot.values)
+                            x = np.arange(y.shape[0])/6
+                            z = np.polyfit(x, y, 1)
+                            p = np.poly1d(z)
+                            #
+                            #xx = np.linspace(x.min(), x.max(), 100)
+                            #dd = mdates.num2date(xx)
+                            #
+                            l_fit.append(z)
+                            #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                            label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                            #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                            #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                            #dy = p(xx[0]) - p(xx[-1])
+                            #tau = dt/dy
+                            tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                            #
+                            #_yy = 10**p(x)#(xx)
+                            #_dd = np.arange(_yy.shape[0])
+                            #
+                            ax.plot(x, 10**p(x), '-g', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                            axb.plot([],[], '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+
+                            ## polyfit 2
+                            if j in [0,1]:
+                                t0 = erup_times[j] - look_back*day#30*day
+                                t1 = erup_times[j] + 2/8*day#hour
+                                _range = [t0,t1]
+                                #
+                                inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
+                                v_plot = data[data_stream].loc[inds]
+                                #
+                                #x = mdates.date2num(data.index[inds])
+                                y = np.log10(v_plot.values)
+                                x = np.arange(y.shape[0])/6
+                                z = np.polyfit(x, y, 1)
+                                p = np.poly1d(z)
+                                #
+                                #xx = np.linspace(x.min(), x.max(), 100)
+                                #dd = mdates.num2date(xx)
+                                #
+                                l_fit.append(z)
+                                #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                                label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                                #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                    #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                                #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                                #dy = p(xx[0]) - p(xx[-1])
+                                #tau = dt/dy
+                                tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                                #
+                                #ax.plot(dd, 10**p(xx), '--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                ax.plot(x, 10**p(x),'--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                axb.plot([],[], '--b', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                                ##
+                                if log:
+                                    ax.set_ylabel(' ')
+                                else:
+                                    ax.set_ylabel('RSAM \u03BC m/s')
+                                #ax4.set_xlabel('Time [month-day hour]')
+                                #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
+                                #
+                                #ax.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax.set_xticks([i for i in range(24)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax4.set_ylim([1e9,1e13])
+                                #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax.set_yscale('log')
+                #if j == 0:
+                axb.legend(loc = 1, prop={'size': 10})     
                 axb.grid(False)
                 ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
                 #
                 axb.set_yticklabels([])
+                ax.set_xlabel('Time [hours]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
 
         # _d = 5 
         # t2 = erup_times[0] + look_front*day#hour
@@ -12980,7 +13162,7 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
     ax6.set_title('(f) 24 hours after 2021/03/04 Ruapehu possible sealing and fluid release event')
     #
     fig.tight_layout()
-    #plt.show()
+    plt.show()
     #plt.close('all')
     #
     if True:
@@ -13000,150 +13182,30 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
 
         if True: # Kawah Ijen eruption 
             erup_times = [datetimeify('2013 01 24 00 00 00'), datetimeify('2013 03 31 22 45 00')]
-            erup_times = [datetimeify('2013 01 24 00 00 00'), datetimeify('2013 03 31 22 45 00')]
+            erup_times = [datetimeify('2013 01 24 00 00 00'), datetimeify('2013 04 01 02 45 00')]
 
-            #
             # subplot one: MF, HF, DSAR medians (DSAR yaxis left; MF, HF yaxis rigth). 1/RSAM (normalized)
             if True:
                 for j,ax in enumerate([ax7, ax9]):
-                    # if j == 1: 
-                    #     pass
-                    #     #look_back = 0.5
-                    #     #look_front = 0.5
-                    # features
+                    #
                     t0 = erup_times[j] - look_back*day#30*day
                     t1 = erup_times[j] + look_front*day#hour
-                    #
-                    fts_yleft = []#['zsc2_dsarF__median']
-                    fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
-                    data_yrigth = ['rsam']
-                    #
-                    col = ['b','b','r']
-                    alpha = [1., 1., .5]
-                    thick_line = [2., 6., 1.]
-                    axb = ax.twinx() 
-                    for i, ft in enumerate(fts_yleft):
-                        if True: # load feature (else: cal feature. median or rv)
-                            if 'zsc2_dsarF' in ft:
-                                ds = ['zsc2_dsarF'] 
-                            if server:
-                                path_feat_serv = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\features_bkp\\features_server\\'
-                                fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
-                                    look_forward=2., data_streams=ds, 
-                                    feature_dir=path_feat_serv, 
-                                    savefile_type='pkl') 
-                            elif server2:
-                                path_feat_serv = 'U:\\Research\\EruptionForecasting\\eruptions\\features\\'
-                                fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
-                                    look_forward=2., data_streams=ds, 
-                                    feature_dir=path_feat_serv, 
-                                    savefile_type='pkl') 
-                            else:
-                                try:
-                                    fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
-                                        look_forward=2., data_streams=ds, savefile_type='csv')
-                                except:
-                                    fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
-                                        look_forward=2., data_streams=ds, savefile_type='pkl')                    
-                            ##  
-                            ft = ft.replace("-",'"')
-                            # adding multiple Axes objects
-                            ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
-                            # extract values to plot 
-                            ft_e1_t = ft_e1[0].index.values
-                            ft_e1_v = ft_e1[0].loc[:,ft]
-                            #
-                            v_plot = ft_e1_v
-
-                            #v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
-                            #v_plot = ft_e1_v/np.max(ft_e1_v)
-                        else: 
-                            #
-                            if 'zsc2_dsarF' in ft:
-                                ds = 'zsc2_dsarF'
-                            if 'zsc2_mfF' in ft:
-                                ds = 'zsc2_mfF' 
-                            if 'zsc2_hfF' in ft:
-                                ds = 'zsc2_hfF' 
-                            # 
-                            #
-                            day = timedelta(days=1)
-                            fm = ForecastModel(window=2., overlap=1., station=sta,
-                                look_forward=2., data_streams=[ds], 
-                                data_dir=r'C:\Users\aar135\codes_local_disk\volc_forecast_tl\volc_forecast_tl\data'
-                                )
-                            #
-                            N, M = [2,30]
-                            df = fm.data.df[t0:t1]
-                            if 'median' in ft:
-                                test = df[ds].rolling(N*24*6).median()[N*24*6:]
-                            if 'rate_variance' in ft:
-                                test = df[ds].rolling(N*24*6).apply(chqv)[N*24*6:]
-                            #
-                            #out = test.rolling(archtype.shape[0]).apply(partial(conv, (archtype-archtype.mean())/archtype.std()))       
-                            #out = out.resample('1D').ffill()
-                            #
-                            ft_e1_t = test.index
-                            v_plot = test.values
-                        #
-                        if ft == 'zsc2_dsarF__median':
-                            ft = 'nDSAR median'
-                        #
-                        axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
-                        #
-                        #
-                        if ffm: # ffm 
-                            #ax1b = ax1.twinx() 
-                            #v_plot = data[data_stream].loc[inds]
-                            inv_rsam = fm_e1.data.get_data(ti=t0, tf=t1)['rsamF']#.loc[ft_e1_t]
-                            inv_rsam = 1./inv_rsam
-                            # normalized it to yaxis rigth 
-                            inv_rsam = inv_rsam/max(inv_rsam)
-                            inv_rsam = inv_rsam*0.5*max(v_plot)
-                            #
-                            ax.plot(ft_e1_t, inv_rsam, '-', color= 'gray', linewidth=0.5, markersize=0.5, alpha = 1.)
-                            ax.plot([], [], '-', color= 'gray', markersize=1, label='1/RSAM', alpha = 1.0)
-                            #ax1.set_ylim([0,1])
-                            #ax1.set_yticks([])
-                        #
-                        if plot_erup: # plot vertical lines
-                            te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
-                            if j == 1:
-                                ax.axvline(te, color='red', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
-                                axb.plot([], color='red', alpha = .25, linestyle='-', linewidth=12, label = 'eruption')
-                            else:
-                                ax.axvline(te, color='gray', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
-                                axb.plot([], color='gray', alpha = .25, linestyle='-', linewidth=12, label = 'fluid release event')
-                        #
-                        #ax1.legend(loc = 2)
-                        #
-                        te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
-                        #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                    # subplot one: MF, HF, DSAR medians (DSAR yaxis left; MF, HF yaxis rigth). 1/RSAM (normalized)
+                    if True:
+                        # features
+                        fts_yleft = []#['zsc2_dsarF__median']
+                        fts_yrigth = []#['zsc2_dsarF__rate_variance']#['zsc2_dsarF__change_quantiles__f_agg_"var"__isabs_False__qh_0.6__ql_0.4']#['zsc2_mfF__median','zsc2_hfF__median']
+                        data_yrigth = ['rsam']
                         
-                        #ax1b.set_yticks([])
-                        axb.grid()
-                        axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
-                        #ax1.set_yscale('log') #ax.set_yscale('log')
-                        #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                        #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                    #     #
-                    # except:
-                    #     pass
-                    if fts_yrigth:
-                        #ax1b = ax1.twinx() 
-                        col = ['r','g']
-                        alpha = [1., .5]
-                        thick_line = [2.,1.]
-                        #try: 
-                        for i, ft in enumerate(fts_yrigth):
-                            if 'zsc2_dsarF' in ft:
-                                ds = 'zsc2_dsarF'
-                            if 'zsc2_mfF' in ft:
-                                ds = 'zsc2_mfF' 
-                            if 'zsc2_hfF' in ft:
-                                ds = 'zsc2_hfF' 
-                            # 
-                            if False: # look feature in the prev cacl features (else: calculate feat from data; only for median and rv)
+                        #
+                        col = ['b','b','r']
+                        alpha = [1., 1., .5]
+                        thick_line = [2., 6., 1.]
+                        axb = ax.twinx() 
+                        for i, ft in enumerate(fts_yleft):
+                            if True: # load feature (else: cal feature. median or rv)
+                                if 'zsc2_dsarF' in ft:
+                                    ds = ['zsc2_dsarF'] 
                                 if server:
                                     path_feat_serv = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\features_bkp\\features_server\\'
                                     fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
@@ -13165,17 +13227,26 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                                             look_forward=2., data_streams=ds, savefile_type='pkl')                    
                                 ##  
                                 ft = ft.replace("-",'"')
-                                
-                                ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
                                 # adding multiple Axes objects
-
+                                ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
                                 # extract values to plot 
                                 ft_e1_t = ft_e1[0].index.values
                                 ft_e1_v = ft_e1[0].loc[:,ft]
                                 #
                                 v_plot = ft_e1_v
 
-                            else:
+                                #v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
+                                #v_plot = ft_e1_v/np.max(ft_e1_v)
+                            else: 
+                                #
+                                if 'zsc2_dsarF' in ft:
+                                    ds = 'zsc2_dsarF'
+                                if 'zsc2_mfF' in ft:
+                                    ds = 'zsc2_mfF' 
+                                if 'zsc2_hfF' in ft:
+                                    ds = 'zsc2_hfF' 
+                                # 
+                                #
                                 day = timedelta(days=1)
                                 fm = ForecastModel(window=2., overlap=1., station=sta,
                                     look_forward=2., data_streams=[ds], 
@@ -13194,134 +13265,283 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                                 #
                                 ft_e1_t = test.index
                                 v_plot = test.values
+                            #
+                            if ft == 'zsc2_dsarF__median':
+                                ft = 'nDSAR median'
+                            #
+                            axb.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i], linewidth = thick_line[i], label=' '+ ft, zorder = 2)
 
-                            #v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
-                            #v_plot = ft_e1_v/np.max(ft_e1_v)
                             #
-                            if ft == 'zsc2_mfF__median':
-                                ft = 'nMF median'
-                            if ft == 'zsc2_hfF__median':
-                                ft = 'nHF median'
+                            if ffm: # ffm 
+                                #ax1b = ax1.twinx() 
+                                #v_plot = data[data_stream].loc[inds]
+                                inv_rsam = fm_e1.data.get_data(ti=t0, tf=t1)['rsamF']#.loc[ft_e1_t]
+                                inv_rsam = 1./inv_rsam
+                                # normalized it to yaxis rigth 
+                                inv_rsam = inv_rsam/max(inv_rsam)
+                                inv_rsam = inv_rsam*0.5*max(v_plot)
+                                #
+                                ax.plot(ft_e1_t, inv_rsam, '-', color= 'gray', linewidth=0.5, markersize=0.5, alpha = 1.)
+                                ax.plot([], [], '-', color= 'gray', markersize=1, label='1/RSAM', alpha = 1.0)
+                                #ax1.set_ylim([0,1])
+                                #ax1.set_yticks([])
                             #
-                            ax.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i],label=' '+ ft, zorder = 4)
+                            if plot_erup: # plot vertical lines
+                                te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
+                                if j == 0:
+                                    ax.axvline(te, color='red', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                    axb.plot([], color='red', alpha = .25, linestyle='-', linewidth=12, label = 'eruption')
+                                else:
+                                    ax.axvline(te, color='gray', alpha = .25, linestyle='-', linewidth=12, zorder = 0)
+                                    axb.plot([], color='gray', alpha = .25, linestyle='-', linewidth=12, label = 'fluid release event')
                             #
-                            ax.legend(loc = 3)
+                            #ax1.legend(loc = 2)
                             #
-                            te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
+                            te = datetimeify(erup_times[j])#fm_e1.data.tes[int(erup[-1:])-1]
                             #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                             
                             #ax1b.set_yticks([])
-                            #ax.grid()
-                            ax.set_ylabel('Feature value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
-
+                            axb.grid()
+                            axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                            #ax1.set_yscale('log') #ax.set_yscale('log')
                             #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
                             #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                            #
-                        #except:
-                        #    pass
-
-                    else:
-                        pass
-                        if data_yrigth:
-                            #
+                        #     #
+                        # except:
+                        #     pass
+                        if fts_yrigth:
                             #ax1b = ax1.twinx() 
-                            #
-                            td = TremorData(station = sta)
-                            #td.update(ti=t0, tf=t1)
-                            data_streams = data_yrigth#['hf','mf', 'rsam']#, 'dsarF']
-                            label = ['RSAM','MF','HF','DSAR']
-                            #label = ['1/RSAM']
-                            inv = False
-                            if False:
-                                data_streams = ['rsam']
-                                label = ['RSAM']
-
-                            if type(data_streams) is str:
-                                data_streams = [data_streams,]
-                            if any(['_' in ds for ds in data_streams]):
-                                td._compute_transforms()
-                            #ax.set_xlim(*range)
-                            # plot data for each year
-                            norm= False
-                            _range = [t0,t1]
-                            log =False
-                            col_def = None
-                            data = td.get_data(*_range)
-                            xi = datetime(year=1,month=1,day=1,hour=0,minute=0,second=0)
-                            cols = ['k','r','g','m',[0.5,0.5,0.5],[0.75,0.75,0.75]]
-                            if inv:
-                                cols = ['k','g','r','m',[0.5,0.5,0.5],[0.75,0.75,0.75]]
-                            inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
-                            i=0
-                            for data_stream, col in zip(data_streams,cols):
-                                v_plot = data[data_stream].loc[inds]
-                                if inv:
-                                    v_plot = 1/v_plot
-                                if log:
-                                    v_plot = np.log10(v_plot)
-                                if norm:
-                                    v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
-                                if label:
-                                    if col_def:
-                                        ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
+                            col = ['r','g']
+                            alpha = [1., .5]
+                            thick_line = [2.,1.]
+                            #try: 
+                            for i, ft in enumerate(fts_yrigth):
+                                if 'zsc2_dsarF' in ft:
+                                    ds = 'zsc2_dsarF'
+                                if 'zsc2_mfF' in ft:
+                                    ds = 'zsc2_mfF' 
+                                if 'zsc2_hfF' in ft:
+                                    ds = 'zsc2_hfF' 
+                                # 
+                                if False: # look feature in the prev cacl features (else: calculate feat from data; only for median and rv)
+                                    if server:
+                                        path_feat_serv = 'C:\\Users\\aar135\\codes_local_disk\\volc_forecast_tl\\features_bkp\\features_server\\'
+                                        fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
+                                            look_forward=2., data_streams=ds, 
+                                            feature_dir=path_feat_serv, 
+                                            savefile_type='pkl') 
+                                    elif server2:
+                                        path_feat_serv = 'U:\\Research\\EruptionForecasting\\eruptions\\features\\'
+                                        fm_e1 = ForecastModel(window=2., overlap=1., station =  sta,
+                                            look_forward=2., data_streams=ds, 
+                                            feature_dir=path_feat_serv, 
+                                            savefile_type='pkl') 
                                     else:
-                                        #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
-                                        ax.plot(data.index[inds], v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
-                                        axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
+                                        try:
+                                            fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
+                                                look_forward=2., data_streams=ds, savefile_type='csv')
+                                        except:
+                                            fm_e1 = ForecastModel(window=2., overlap=1., station = sta,
+                                                look_forward=2., data_streams=ds, savefile_type='pkl')                    
+                                    ##  
+                                    ft = ft.replace("-",'"')
+                                    
+                                    ft_e1 = fm_e1.get_features(ti=t0, tf=t1, n_jobs=1, compute_only_features=[ft])
+                                    # adding multiple Axes objects
+
+                                    # extract values to plot 
+                                    ft_e1_t = ft_e1[0].index.values
+                                    ft_e1_v = ft_e1[0].loc[:,ft]
+                                    #
+                                    v_plot = ft_e1_v
+
                                 else:
-                                    ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
-                                i+=1
-                            for te in td.tes:
-                                if [te>=datetimeify(_range[0]) and te<=datetimeify(_range[1])]:
-                                    pass
-                                    #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
-                            #
-                            ax.plot([], color='k', linestyle='--', linewidth=1, label = 'eruption')
-                            #ax4.set_xlim(_range)
-                            #ax1b.legend(loc = 2)
-                            #ax1b.grid()
-                            if log:
-                                ax.set_ylabel(' ')
-                            else:
-                                ax.set_ylabel('RSAM \u03BC m/s')
-                            #ax4.set_xlabel('Time [month-day hour]')
-                            #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
-                            #
-                            # polyfit
-                            #x = data.index[inds] 
-                            x = mdates.date2num(data.index[inds] )
-                            y = np.log10(v_plot.values)
-                            z = np.polyfit(x, y, 1)
-                            p = np.poly1d(z)
-                            #
-                            xx = np.linspace(x.min(), x.max(), 100)
-                            dd = mdates.num2date(xx)
-                            #
-                            l_fit.append([z])
-                            ax.plot(dd, 10**p(xx), '-g', label = 'linear fit')
-                            #axb.plot([],[], '-g', label = 'linear fit')
-                            #axb.plot([],[], '-g', label = r'linear fit (tau='+str(round(-1./z[0],2))+' hrs)')
-                            dt = (dd[-1]-dd[0]).seconds/3600 # hours
-                            dy = p(xx[0]) - p(xx[-1])
-                            tau = dt/dy
-                            #
-                            #ax.plot(dd, 10**p(xx), '-g', label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
-                            axb.plot([],[], '-g', label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
-                            #
-                            #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
-                            #ax4.set_ylim([1e9,1e13])
-                            #ax.set_yscale('log')
-                    
-                    ax.set_xlabel('Time [month-day hour]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
-                    axb.legend(loc = 1, prop={'size': 10})  
-                    axb.grid(False)
-                    ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
-                    #
-                    axb.set_yticklabels([])
-                    # _d = 5 
-                    # t1 = erup_times[0] + look_front*day#hour
-                    # ax.set_xticks([t1 - _d*day*i for i in range(int((look_back+look_front)/_d)+1)])
-        
+                                    day = timedelta(days=1)
+                                    fm = ForecastModel(window=2., overlap=1., station=sta,
+                                        look_forward=2., data_streams=[ds], 
+                                        data_dir=r'C:\Users\aar135\codes_local_disk\volc_forecast_tl\volc_forecast_tl\data'
+                                        )
+                                    #
+                                    N, M = [2,30]
+                                    df = fm.data.df[t0:t1]
+                                    if 'median' in ft:
+                                        test = df[ds].rolling(N*24*6).median()[N*24*6:]
+                                    if 'rate_variance' in ft:
+                                        test = df[ds].rolling(N*24*6).apply(chqv)[N*24*6:]
+                                    #
+                                    #out = test.rolling(archtype.shape[0]).apply(partial(conv, (archtype-archtype.mean())/archtype.std()))       
+                                    #out = out.resample('1D').ffill()
+                                    #
+                                    ft_e1_t = test.index
+                                    v_plot = test.values
+
+                                #v_plot = ft_e1_v-np.min(ft_e1_v)/np.max((ft_e1_v-np.min(ft_e1_v)))
+                                #v_plot = ft_e1_v/np.max(ft_e1_v)
+                                #
+                                if ft == 'zsc2_mfF__median':
+                                    ft = 'nMF median'
+                                if ft == 'zsc2_hfF__median':
+                                    ft = 'nHF median'
+                                #
+                                ax.plot(ft_e1_t, v_plot, '-', color=col[i], alpha = alpha[i],label=' '+ ft, zorder = 4)
+                                #
+                                ax.legend(loc = 3)
+                                #
+                                te = datetimeify(erup_time)#fm_e1.data.tes[int(erup[-1:])-1]
+                                #ax1.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                
+                                #ax1b.set_yticks([])
+                                #ax.grid()
+                                ax.set_ylabel('Feature value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                                #ax.set_xticks([ft_e1[0].index[-1] - 7*day*i for i in range(int(30/7)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #ax1.set_xticks([t1 - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                #
+                            #except:
+                            #    pass
+
+                        else:
+                            pass
+                            if data_yrigth:
+                                #
+                                #ax1b = ax1.twinx() 
+                                #
+                                td = TremorData(station = sta)
+                                #td.update(ti=t0, tf=t1)
+                                data_streams = data_yrigth#['hf','mf', 'rsam']#, 'dsarF']
+                                label = ['RSAM','MF','HF','DSAR']
+                                #label = ['1/RSAM']
+                                inv = False
+                                if False:
+                                    data_streams = ['rsam']
+                                    label = ['RSAM']
+
+                                if type(data_streams) is str:
+                                    data_streams = [data_streams,]
+                                if any(['_' in ds for ds in data_streams]):
+                                    td._compute_transforms()
+                                #ax.set_xlim(*range)
+                                # plot data for each year
+                                norm= False
+                                _range = [t0,t1]
+                                log =False
+                                col_def = None
+                                data = td.get_data(*_range)
+                                xi = datetime(year=1,month=1,day=1,hour=0,minute=0,second=0)
+                                cols = ['k','r','g','m',[0.5,0.5,0.5],[0.75,0.75,0.75]]
+                                if inv:
+                                    cols = ['k','g','r','m',[0.5,0.5,0.5],[0.75,0.75,0.75]]
+                                inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
+                                i=0
+                                for data_stream, col in zip(data_streams,cols):
+                                    v_plot = data[data_stream].loc[inds]
+                                    if inv:
+                                        v_plot = 1/v_plot
+                                    if log:
+                                        v_plot = np.log10(v_plot)
+                                    if norm:
+                                        v_plot = (v_plot-np.min(v_plot))/np.max((v_plot-np.min(v_plot)))
+                                    if label:
+                                        if col_def:
+                                            ax.plot(data.index[inds], v_plot, '-', color=col_def, label=label[i], linewidth=1., alpha = 1., zorder = 0)
+                                        else:
+                                            #ax1b.plot(data.index[inds], v_plot, '-', color=col, label=label[i], linewidth=1., alpha = 1.0, zorder = 0)
+                                            _dd = data.index[inds]
+                                            _dd = np.arange(v_plot.shape[0])/6
+                                            ax.plot(_dd, v_plot, '-', color=col, linewidth=1., alpha = .7, zorder = 3)
+                                            axb.plot([], [], '-', color=col, label=label[i], linewidth=1., alpha = .7, zorder = 3)
+                                    else:
+                                        ax.plot(data.index[inds], v_plot, '-', color=col, label=data_stream, linewidth=1., alpha = .7, zorder = 3)
+                                    i+=1
+                                for te in td.tes:
+                                    if [te>=datetimeify(_range[0]) and te<=datetimeify(_range[1])]:
+                                        pass
+                                        #ax.axvline(te, color='k', linestyle='--', linewidth=2, zorder = 0)
+                                #
+                                ax.plot([], color='k', linestyle='--', linewidth=1, label = 'eruption')
+                                #ax4.set_xlim(_range)
+                                #ax1b.legend(loc = 2)
+                                #ax1b.grid()
+                                #
+                                if True:
+                                    ## polyfit 1
+                                    #x = data.index[inds] 
+                                    #x = mdates.date2num(data.index[inds])
+                                    y = np.log10(v_plot.values)
+                                    x = np.arange(y.shape[0])/6
+                                    z = np.polyfit(x, y, 1)
+                                    p = np.poly1d(z)
+                                    #
+                                    #xx = np.linspace(x.min(), x.max(), 100)
+                                    #dd = mdates.num2date(xx)
+                                    #
+                                    l_fit.append(z)
+                                    #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                                    label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                                    #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                        #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                                    #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                                    #dy = p(xx[0]) - p(xx[-1])
+                                    #tau = dt/dy
+                                    tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                                    #
+                                    #_yy = 10**p(x)#(xx)
+                                    #_dd = np.arange(_yy.shape[0])
+                                    #
+                                    ax.plot(x, 10**p(x), '-g', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                    axb.plot([],[], '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+
+                                    ## polyfit 2
+                                    if j in [0,1]:
+                                        t0 = erup_times[j] - look_back*day#30*day
+                                        t1 = erup_times[j] + 2/8*day#hour
+                                        _range = [t0,t1]
+                                        #
+                                        inds = (data.index>=datetimeify(_range[0]))&(data.index<=datetimeify(_range[1]))
+                                        v_plot = data[data_stream].loc[inds]
+                                        #
+                                        #x = mdates.date2num(data.index[inds])
+                                        y = np.log10(v_plot.values)
+                                        x = np.arange(y.shape[0])/6
+                                        z = np.polyfit(x, y, 1)
+                                        p = np.poly1d(z)
+                                        #
+                                        #xx = np.linspace(x.min(), x.max(), 100)
+                                        #dd = mdates.num2date(xx)
+                                        #
+                                        l_fit.append(z)
+                                        #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                                        label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                                        #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                            #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                                        #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                                        #dy = p(xx[0]) - p(xx[-1])
+                                        #tau = dt/dy
+                                        tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                                        #
+                                        #ax.plot(dd, 10**p(xx), '--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                        ax.plot(x, 10**p(x),'--b', linewidth=3, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                        axb.plot([],[], '--b', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                                        ##
+                                        if log:
+                                            ax.set_ylabel(' ')
+                                        else:
+                                            ax.set_ylabel('RSAM \u03BC m/s')
+                                        #ax4.set_xlabel('Time [month-day hour]')
+                                        #ax4.title.set_text('Station '+td.station+' ('+sta_code[td.station]+'): Tremor data')
+                                        #
+                                        #ax.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                        #ax.set_xticks([i for i in range(24)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                        #ax4.set_ylim([1e9,1e13])
+                                        #ax4.set_xticks([te - 5*day*i for i in range(int(look_back/5)+1)])#[dat.index.values[0],dat.index.values[-1]])#, ]np.arange(0, len(x)+1, 5))
+                                        #ax.set_yscale('log')
+                        #if j == 0:
+                        axb.legend(loc = 1, prop={'size': 10})     
+                        axb.grid(False)
+                        ax.grid(color='gray', linestyle='-', linewidth=.5, alpha = 0.5)
+                        #
+                        axb.set_yticklabels([])
+                        ax.set_xlabel('Time [hours]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+
         if True: # Copahue eruption 
             #
             sta = 'COP' 
@@ -13372,8 +13592,10 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                             #
                             #
                             _times = archtype.index
+
                             _val = archtype.values
                             _val = np.exp(_val)
+                            _times = np.arange(_val.shape[0])/6
                             _val_max = max(_val)
                         else:
                             k = fm.data.df.index
@@ -13387,27 +13609,67 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                         #ax.plot([], [], '-', color='k', alpha = .7, linewidth=1., label=' '+ ft,zorder=1)
                         # lim
                         # polyfit
-                        #x = data.index[inds] 
-                        x = mdates.date2num(_times)
-                        y = np.log10(_val)
-                        z = np.polyfit(x, y, 1)
-                        p = np.poly1d(z)
-                        #
-                        xx = np.linspace(x.min(), x.max(), 100)
-                        dd = mdates.num2date(xx)
-                        #
-                        l_fit.append([z])
-                        ax.plot(dd, 10**p(xx), '-g')#, label = 'linear fit')
-                        #
-                        dt = (dd[-1]-dd[0]).seconds/3600 # hours
-                        dy = p(xx[0]) - p(xx[-1])
-                        tau = dt/dy
-                        #
-                        #ax.plot(dd, 10**p(xx), '-g', label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
-                        ax.plot([],[], '-g', label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
-                        #ax.plot([],[], '-g', label = r'linear fit (tau='+str(round(-1./z[0],2))+' hrs)')
-                        #axb.plot([],[], '-g', label = 'linear fit')
-                        #ax.set_ylim([0,np.mean(_val)+3*np.std(_val)])
+                        if True:
+                            #x = data.index[inds] 
+                            #x = mdates.date2num(_times)
+                            y = np.log10(_val)
+                            x = np.arange(y.shape[0])/6
+                            z = np.polyfit(x, y, 1)
+                            p = np.poly1d(z)
+                            #
+                            #xx = np.linspace(x.min(), x.max(), 100)
+                            #dd = mdates.num2date(xx)
+                            #
+                            l_fit.append(z)
+                            #ax.plot(dd, 10**p(xx), '-g')#, label = 'linear fit')
+                            #
+                            #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                            #dy = p(xx[0]) - p(xx[-1])
+                            #tau = dt/dy
+                            tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                            #
+                            #ax.plot(dd, 10**p(xx), '-g', label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                            #ax.plot([],[], '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                            #ax.plot([],[], '-g', label = r'linear fit (tau='+str(round(-1./z[0],2))+' hrs)')
+                            #axb.plot([],[], '-g', label = 'linear fit')
+                            #ax.set_ylim([0,np.mean(_val)+3*np.std(_val)])
+                            ax.plot(x, 10**p(x), '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                            axb.plot([],[], '-g', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+
+                            ## polyfit 2
+                            if j in [0]:
+                                df = fm.data.df[(k>(te-0*day))&(k<te+3.5/8*day)]
+                                #archtype = df[dt].rolling(N*24*6).median()[N*24*6:]
+                                dt = 'zsc2_rsamF'
+                                archtype = df[dt]#.rolling(N*24*6).median()[N*24*6:]
+                                #
+                                #
+                                _times = archtype.index
+                                _val = archtype.values
+                                _val = np.exp(_val)
+                                #
+                                #x = mdates.date2num(_times)
+                                y = np.log10(_val)
+                                x = np.arange(y.shape[0])/6
+                                z = np.polyfit(x, y, 1)
+                                p = np.poly1d(z)
+                                #
+                                #xx = np.linspace(x.min(), x.max(), 100)
+                                #dd = mdates.num2date(xx)
+                                #
+                                l_fit.append(z)
+                                #axb.plot([],[], '-g', label = 'linear fit (\{tau}_0='+str(round(l_fit[0][0],2))+')')
+                                #label = r'\tau_0 = '+ str(round(l_fit[0][0],2))
+                                #ax.text(0., 0., label)#, fontsize='medium', verticalalignment='top', fontfamily='serif',
+                                #bbox=dict(facecolor='0.7', edgecolor='none', pad=3.0))
+                                #dt = (dd[-1]-dd[0]).seconds/3600 # hours
+                                #dy = p(xx[0]) - p(xx[-1])
+                                #tau = dt/dy
+                                tau = -(x[-1]-x[0])/(y[-1]-y[0])
+                                #
+                                ax.plot(x, 10**p(x), '--b', linewidth=3)#, label = 'linear fit (\{tau}_0='+str(round(tau,2))+')')
+                                ax.plot([],[], '--b', linewidth=3, label = r'linear fit ($\tau_d$='+str(round(tau,1))+' hrs)')
+                            ##
                     #
                     if False: # DSAR
                         axb = ax.twinx()
@@ -13457,7 +13719,7 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     #axb.grid()
                     #axb.set_ylabel('nDSAR value')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                     ax.set_ylabel('RSAM \u03BC m/s')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
-                    ax.set_xlabel('Time [month-day hour]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
+                    ax.set_xlabel('Time [hours]')        #ax.set_xticks([ft_e1[0].index[-1]-7*day*i +day for i in range(5)])
                     #
                     #ax.set_xticklabels(ax.get_xticks(), rotation = 30)
                     #ax1.set_yscale('log') #ax.set_yscale('log')
@@ -13475,7 +13737,6 @@ def figure_5_alt_ruap_kawa_copa():  # man selected events RSAM and DSAR
                     # t1 = erup_times[0] + look_front*day#hour
                     # ax.set_xticks([t1 - _d*day*i for i in range(int((look_back+look_front)/_d)+1)])
                     #
-        
         #
         #ax.set_xlim([t0+2*day,t1])
         #ax1.set_ylim([10**.4,10**2.1])
@@ -13529,8 +13790,8 @@ def main():
     #plot_seismic_temp_data()
 
     ## lake temperature correlation
-    #cc_over_record()
-    # locate_missed_events_seismic()
+    cc_over_record()
+    #locate_missed_events_seismic()
     #plot_located_events_compress()
 
     # temp_erup_ana()
@@ -13566,7 +13827,7 @@ def main():
 
     # current
     #figure_1()
-    figure_3_alt_ruap_kawa_copa() #man selected events RSAM and DSAR
+    #figure_3_alt_ruap_kawa_copa() #man selected events RSAM and DSAR
     #figure_2_alt() # histograms
     #figure_4_alt()
     #figure_5_alt_ruap_kawa_copa() #man selected events RSAM, zoom in after events 
